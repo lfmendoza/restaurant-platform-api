@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const errorHandler = require("./middleware/errorHandler");
 
 const usersRouter = require("./routes/users");
 const restaurantsRouter = require("./routes/restaurants");
@@ -34,5 +35,7 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({ status: "ok", db: process.env.DB_NAME || "restaurant_orders" });
 });
+
+app.use(errorHandler);
 
 module.exports = app;
