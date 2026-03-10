@@ -1,0 +1,76 @@
+flowchart TB
+  subgraph clientLayer [Capa Cliente]
+    FE["Frontend React/Vite"]
+    RestPanel["Panel Restaurante"]
+    AdminDash["Dashboard Analytics"]
+  end
+
+  subgraph commandLayer [Command Layer]
+    CmdOrders["POST /orders"]
+    CmdCarts["PUT /carts"]
+    CmdReviews["POST /reviews"]
+    CmdMenuBulk["POST /menu-items/bulk"]
+    CmdAvail["PATCH /availability"]
+  end
+
+  subgraph queryLayer [Query Layer]
+    QrySearch["GET /restaurants/search"]
+    QryMenu["GET /menu"]
+    QryStats["GET /stats"]
+    QryDash["GET /analytics"]
+  end
+
+  subgraph oltp [OLTP - Source of Truth]
+    users["users"]
+    restaurants["restaurants"]
+    menu_items["menu_items 50K+"]
+    orders["orders FSM"]
+    reviews["reviews"]
+    carts["carts TTL-24h"]
+    delivery_zones["delivery_zones GeoPolygon"]
+  end
+
+  subgraph eventBridge [Event Bridge - Change Streams]
+    CS1["CS: orders"]
+    CS2["CS: reviews"]
+    CS3["CS: menu_items"]
+  end
+
+  subgraph olap [OLAP - Derived]
+    restaurant_stats["restaurant_stats"]
+    order_events["order_events TimeSeries"]
+    daily_revenue["daily_revenue Batch"]
+  end
+
+  subgraph batch [Batch Processing]
+    NightlyAgg["Nightly $merge"]
+    WeeklyRecon["Weekly reconcile"]
+  end
+
+  subgraph gfs [File Storage]
+    GridFS["GridFS images"]
+  end
+
+  subgraph biL [BI]
+    Charts["MongoDB Charts"]
+  end
+
+  FE --> commandLayer
+  FE --> queryLayer
+  RestPanel --> commandLayer
+  RestPanel --> queryLayer
+  AdminDash --> queryLayer
+
+  commandLayer --> oltp
+  queryLayer --> olap
+  queryLayer --> oltp
+
+  oltp --> eventBridge
+  eventBridge --> olap
+
+  batch --> oltp
+  batch --> olap
+
+  commandLayer --> GridFS
+  olap --> Charts
+  Charts --> AdminDash

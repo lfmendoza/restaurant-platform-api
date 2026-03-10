@@ -1,0 +1,38 @@
+sequenceDiagram
+  participant User
+  participant OLTP as orders OLTP
+  participant CS as Change Stream
+  participant Stats as restaurant_stats
+  participant Events as order_events
+  participant BatchDaily as Batch Diario
+  participant Revenue as daily_revenue
+  participant BatchWeekly as Batch Semanal
+
+  Note over User, BatchWeekly: STREAM PROCESSING - Tiempo Real (milisegundos)
+
+  User->>OLTP: POST /orders (nuevo pedido)
+  OLTP->>CS: oplog: insert detectado
+  CS->>Events: insertOne (eventType: created, toStatus: pending)
+  CS->>Stats: $inc totalOrders: 1
+
+  User->>OLTP: PATCH /orders/:id/status (delivered)
+  OLTP->>CS: oplog: update detectado
+  CS->>Events: insertOne (fromStatus: picked_up, toStatus: delivered)
+  CS->>Stats: $inc totalDelivered: 1, totalRevenue: +247.96
+
+  User->>OLTP: POST /reviews (rating: 4)
+  Note over CS: reviews Change Stream
+  CS->>Stats: Incremental avg: (4.2*50+4)/51 = 4.196
+
+  Note over User, BatchWeekly: BATCH PROCESSING - Programado
+
+  Note over BatchDaily, Revenue: 02:00 UTC - Job Diario
+  BatchDaily->>OLTP: aggregate: $match delivered last 24h
+  BatchDaily->>BatchDaily: $unwind items, $group by restaurant+date
+  BatchDaily->>Revenue: $merge: replace per restaurant per day
+
+  Note over BatchWeekly, Stats: Domingo 03:00 UTC - Reconciliacion
+  BatchWeekly->>OLTP: aggregate: ALL delivered orders
+  BatchWeekly->>BatchWeekly: $group + $lookup reviews + $lookup restaurants
+  BatchWeekly->>Stats: $merge: replace ALL restaurant_stats
+  Note over Stats: Stats sobrescritos con valores<br>recomputados desde source of truth

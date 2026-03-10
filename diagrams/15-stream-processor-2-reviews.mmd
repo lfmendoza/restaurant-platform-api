@@ -1,0 +1,34 @@
+flowchart TD
+  subgraph trigger [Trigger: oplog de reviews]
+    T1["reviews.watch<br>filter: insert only<br>fullDocument: updateLookup"]
+  end
+
+  T1 --> E1["Extraer del fullDocument:<br>restaurantId, rating"]
+
+  E1 --> R1["findOne restaurant_stats<br>obtener oldAvg y oldCount"]
+
+  R1 --> CALC["Calculo Incremental O(1)<br>newAvg = oldAvg * oldCount + newRating<br>           dividido oldCount + 1<br><br>No requiere releer<br>todas las resenas"]
+
+  CALC --> W1["updateOne restaurant_stats<br>filtro: _id = restaurantId"]
+
+  subgraph write_ops [Operaciones de Escritura]
+    OP1["$inc totalReviews: 1"]
+    OP2["$inc ratingDistribution.N: 1<br>donde N = rating (1-5)"]
+    OP3["$set avgRating: newAvg<br>redondeado a 1 decimal"]
+    OP4["$set lastReviewAt: now"]
+    OP5["$set lastUpdated: now"]
+  end
+
+  W1 --> OP1
+  W1 --> OP2
+  W1 --> OP3
+  W1 --> OP4
+  W1 --> OP5
+
+  subgraph example [Ejemplo Numerico]
+    EX1["Estado previo:<br>avgRating: 4.2<br>totalReviews: 50<br>ratingDistribution.4: 20"]
+    EX2["Nueva resena: rating = 5"]
+    EX3["newAvg = 4.2 * 50 + 5 / 51<br>newAvg = 215 / 51 = 4.2"]
+    EX4["Resultado:<br>avgRating: 4.2<br>totalReviews: 51<br>ratingDistribution.5: +1"]
+    EX1 --> EX2 --> EX3 --> EX4
+  end

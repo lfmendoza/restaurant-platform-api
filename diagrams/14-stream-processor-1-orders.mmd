@@ -1,0 +1,40 @@
+flowchart TD
+  subgraph trigger [Trigger: oplog de orders]
+    T1["orders.watch<br>filter: insert OR update<br>fullDocument: updateLookup"]
+  end
+
+  T1 --> D1{"Tipo de<br>operacion?"}
+
+  D1 -->|"insert<br>nuevo pedido"| INSERT_PATH
+  D1 -->|"update<br>cambio de status"| UPDATE_PATH
+
+  subgraph INSERT_PATH [Nuevo Pedido Creado]
+    I1["Extraer: orderId, restaurantId,<br>userId, paymentMethod, total"]
+    I2["insertOne order_events<br>timestamp: now<br>eventType: created<br>fromStatus: null<br>toStatus: pending<br>context: paymentMethod + total"]
+    I3["updateOne restaurant_stats<br>$inc totalOrders: 1<br>$set lastOrderAt: now<br>upsert: true"]
+    I1 --> I2
+    I2 --> I3
+  end
+
+  D1 -->|"update SIN<br>cambio status"| IGNORE["Ignorar<br>no es transicion"]
+
+  subgraph UPDATE_PATH [Transicion de Estado]
+    U1["Leer updatedFields.status<br>Extraer fromStatus del<br>statusHistory[-2]"]
+    U2["insertOne order_events<br>timestamp: now<br>eventType: status_change<br>fromStatus: anterior<br>toStatus: nuevo<br>durationFromPrevSec: diff<br>context: actor"]
+    U3{"Nuevo<br>status?"}
+    U4["updateOne restaurant_stats<br>$inc totalDelivered: 1<br>$inc totalRevenue: order.total<br>recalc avgOrderValue"]
+    U5["updateOne restaurant_stats<br>$inc totalCancelled: 1"]
+    U6["Sin accion<br>adicional en stats"]
+
+    U1 --> U2
+    U2 --> U3
+    U3 -->|"delivered"| U4
+    U3 -->|"cancelled"| U5
+    U3 -->|"confirmed<br>preparing<br>ready<br>picked_up"| U6
+  end
+
+  subgraph resumability [Tolerancia a Fallos]
+    R1["Guardar resumeToken<br>tras cada evento procesado"]
+    R2["Si proceso reinicia:<br>watch con resumeAfter: token"]
+    R1 --> R2
+  end

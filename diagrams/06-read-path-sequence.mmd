@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant Dashboard
+  participant QueryAPI
+  participant OLAP
+  participant OLTP
+
+  Dashboard->>QueryAPI: GET /restaurants/:id/dashboard
+  par Queries paralelas
+    QueryAPI->>OLAP: findOne(restaurant_stats) pre-computado
+    QueryAPI->>OLAP: aggregate(order_events) velocity 5min buckets
+    QueryAPI->>OLAP: find(daily_revenue) trend 30 dias
+    QueryAPI->>OLTP: find(orders, status: active) tiempo real
+  end
+  QueryAPI-->>Dashboard: payload ensamblado

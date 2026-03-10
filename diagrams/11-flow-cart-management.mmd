@@ -1,0 +1,21 @@
+sequenceDiagram
+  participant User
+  participant API
+  participant mi as menu_items
+  participant carts as carts
+
+  Note over User, carts: AGREGAR ITEM
+  User->>API: POST /carts/items menuItemId qty
+  API->>mi: findOne _id available true
+  mi-->>API: name price restaurantId
+  API->>carts: updateOne userId+restaurantId upsert $push items $setOnInsert expiresAt
+  API->>carts: recalcular subtotal
+  API-->>User: carrito actualizado
+
+  Note over User, carts: MODIFICAR CANTIDAD
+  User->>API: PATCH /carts/items/:id qty 3
+  API->>carts: updateOne $set items.$.quantity 3
+
+  Note over User, carts: REMOVER ITEM
+  User->>API: DELETE /carts/items/:id
+  API->>carts: updateOne $pull items menuItemId

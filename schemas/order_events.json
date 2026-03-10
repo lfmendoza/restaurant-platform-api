@@ -1,0 +1,25 @@
+{
+  "timeseries": {
+    "timeField": "timestamp",
+    "metaField": "metadata",
+    "granularity": "minutes"
+  },
+  "expireAfterSeconds": 7776000,
+  "note": "Time Series Collection — no JSON Schema validation; structure defined by timeField + metaField",
+  "documentStructure": {
+    "timestamp": "date (timeField)",
+    "metadata": {
+      "orderId": "ObjectId",
+      "restaurantId": "ObjectId",
+      "userId": "ObjectId"
+    },
+    "eventType": "string: created | status_change | cancelled",
+    "fromStatus": "string | null",
+    "toStatus": "string",
+    "durationFromPrevSec": "int",
+    "context": {
+      "actor": "string: system | restaurant | driver",
+      "reason": "string (optional)"
+    }
+  }
+}

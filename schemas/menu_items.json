@@ -1,0 +1,21 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["restaurantId", "name", "price", "category", "available", "salesCount", "createdAt", "updatedAt"],
+    "properties": {
+      "restaurantId": { "bsonType": "objectId" },
+      "name": { "bsonType": "string", "minLength": 1 },
+      "description": { "bsonType": "string" },
+      "price": { "bsonType": "number", "minimum": 0 },
+      "category": { "bsonType": "string" },
+      "allergens": { "bsonType": "array", "items": { "bsonType": "string" } },
+      "tags": { "bsonType": "array", "items": { "bsonType": "string" } },
+      "available": { "bsonType": "bool" },
+      "preparationTimeMin": { "bsonType": "int", "minimum": 1 },
+      "imageFileId": { "bsonType": ["objectId", "null"] },
+      "salesCount": { "bsonType": "int", "minimum": 0 },
+      "createdAt": { "bsonType": "date" },
+      "updatedAt": { "bsonType": "date" }
+    }
+  }
+}

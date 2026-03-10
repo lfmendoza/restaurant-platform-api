@@ -1,0 +1,44 @@
+flowchart TD
+  subgraph scheduler [Scheduler]
+    CRON["Trigger: Semanal<br>Domingo 03:00 UTC"]
+  end
+
+  CRON --> MATCH["Stage 1: $match<br>status = delivered<br>todos los pedidos historicos"]
+
+  MATCH --> GROUP["Stage 2: $group<br>_id: restaurantId<br>totalDelivered: $sum 1<br>totalRevenue: $sum total<br>avgOrderValue: $avg total<br>lastOrderAt: $max createdAt"]
+
+  GROUP --> LOOKUP_REV["Stage 3: $lookup<br>from: reviews<br>localField: _id<br>foreignField: restaurantId<br>as: reviews"]
+
+  LOOKUP_REV --> CALC_REVIEWS["Stage 4: $addFields<br>totalReviews: $size reviews<br>avgRating: $avg reviews.rating"]
+
+  CALC_REVIEWS --> LOOKUP_REST["Stage 5: $lookup<br>from: restaurants<br>localField: _id<br>foreignField: _id<br>as: rest"]
+
+  LOOKUP_REST --> UNWIND_REST["Stage 6: $unwind<br>path: rest"]
+
+  UNWIND_REST --> PROJECT["Stage 7: $project<br>restaurantName: rest.name<br>totalOrders, totalDelivered<br>totalRevenue, avgOrderValue<br>totalReviews, avgRating<br>lastOrderAt<br>lastUpdated: now"]
+
+  PROJECT --> MERGE["Stage 8: $merge<br>into: restaurant_stats<br>on: _id<br>whenMatched: replace<br>whenNotMatched: insert"]
+
+  MERGE --> RESULT["Resultado:<br>restaurant_stats<br>completamente recomputado<br>desde source of truth"]
+
+  subgraph sources [Sources: OLTP]
+    S1["orders - pedidos entregados"]
+    S2["reviews - todas las resenas"]
+    S3["restaurants - nombres"]
+  end
+
+  subgraph target_coll [Target: OLAP]
+    TGT["restaurant_stats<br>sobrescrito completamente<br>corrige drift de<br>Change Streams"]
+  end
+
+  S1 --> MATCH
+  S2 --> LOOKUP_REV
+  S3 --> LOOKUP_REST
+  MERGE --> TGT
+
+  subgraph why [Por que reconciliar?]
+    W1["Change Streams son<br>at-least-once delivery"]
+    W2["Eventos duplicados<br>pueden causar drift<br>en contadores $inc"]
+    W3["Reconciliacion semanal<br>recomputa desde source<br>of truth y sobrescribe"]
+    W1 --> W2 --> W3
+  end

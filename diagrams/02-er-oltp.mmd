@@ -1,0 +1,11 @@
+erDiagram
+  USERS ||--o{ ORDERS : "realiza"
+  USERS ||--o{ REVIEWS : "escribe"
+  USERS ||--o{ CARTS : "carrito activo"
+  RESTAURANTS ||--o{ MENU_ITEMS : "catalogo"
+  RESTAURANTS ||--o{ DELIVERY_ZONES : "cobertura"
+  RESTAURANTS ||--o{ ORDERS : "atiende"
+  RESTAURANTS ||--o{ REVIEWS : "recibe"
+  ORDERS ||--o| REVIEWS : "resena opcional"
+  CARTS }o--|| RESTAURANTS : "de restaurante"
+  CARTS }o--|| USERS : "pertenece a"

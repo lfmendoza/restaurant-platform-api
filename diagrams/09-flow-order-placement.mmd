@@ -1,0 +1,40 @@
+sequenceDiagram
+  participant User
+  participant API
+  participant Session
+  participant carts as carts
+  participant mi as menu_items
+  participant rest as restaurants
+  participant dz as delivery_zones
+  participant orders as orders
+  participant CS as ChangeStream
+
+  User->>API: POST /orders cartId deliveryAddress paymentMethod
+  API->>Session: startTransaction
+
+  API->>carts: findOne cartId userId
+  Note over API: 1. Validar carrito existe
+
+  API->>mi: find _id $in itemIds available true
+  Note over API: 2. Items disponibles? Si no ABORT
+
+  API->>rest: findOne restaurantId isAcceptingOrders true
+  Note over API: 3. Restaurante abierto? Si no ABORT
+
+  API->>dz: findOne restaurantId area $geoIntersects deliveryPoint
+  Note over API: 4. En cobertura? Obtener deliveryFee. Si no ABORT
+
+  API->>API: 5. Calcular total = subtotal + tax + deliveryFee
+
+  API->>orders: insertOne status pending items snapshot statusHistory
+  API->>mi: updateMany $inc salesCount per item
+  API->>carts: deleteOne cartId
+
+  API->>Session: commitTransaction
+
+  Note over orders, CS: Propagacion asincrona
+  orders->>CS: insert detectado
+  CS->>CS: insert order_events toStatus pending
+  CS->>CS: update restaurant_stats $inc totalOrders
+
+  API-->>User: orderId orderNumber status pending

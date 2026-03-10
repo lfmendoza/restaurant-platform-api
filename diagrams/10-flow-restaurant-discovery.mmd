@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant User
+  participant API
+  participant dz as delivery_zones
+  participant rest as restaurants
+  participant stats as restaurant_stats
+
+  User->>API: GET /restaurants/search?lat=14.6&lng=-90.5&cuisine=italiana
+  API->>dz: find area $geoIntersects userPoint
+  dz-->>API: restaurantIds in coverage + deliveryFee
+  API->>rest: find _id $in ids isActive true cuisineTypes italiana
+  API->>stats: find _id $in ids project avgRating totalOrders
+  API->>API: merge + sort by distance or rating
+  API-->>User: paginated list with stats and deliveryFee

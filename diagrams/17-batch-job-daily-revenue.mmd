@@ -1,0 +1,35 @@
+flowchart TD
+  subgraph scheduler [Scheduler]
+    CRON["Trigger: 02:00 UTC<br>diariamente"]
+  end
+
+  CRON --> MATCH["Stage 1: $match<br>status = delivered<br>updatedAt >= ayer 00:00<br>updatedAt < hoy 00:00"]
+
+  MATCH --> UNWIND["Stage 2: $unwind<br>descomponer items array<br>cada item = 1 documento"]
+
+  UNWIND --> GROUP["Stage 3: $group<br>_id: restaurantId + date truncada<br>revenue: $sum total<br>orderCount: $sum 1<br>deliveredCount: $sum 1<br>avgOrderValue: $avg total"]
+
+  GROUP --> ADDFIELDS["Stage 4: $addFields<br>restaurantId: _id.restaurantId<br>date: _id.date<br>cancelledCount: 0<br>cancelRate: 0"]
+
+  ADDFIELDS --> MERGE["Stage 5: $merge<br>into: daily_revenue<br>on: restaurantId + date<br>whenMatched: replace<br>whenNotMatched: insert"]
+
+  MERGE --> RESULT["Resultado:<br>1 documento por restaurante<br>por dia en daily_revenue"]
+
+  subgraph source [Source: OLTP]
+    SRC["orders<br>status: delivered<br>rango: ultimas 24h"]
+  end
+
+  subgraph target [Target: OLAP]
+    TGT["daily_revenue<br>indice: restaurantId + date -1<br>query: trend 30 dias"]
+  end
+
+  SRC --> MATCH
+  MERGE --> TGT
+
+  subgraph data_transform [Transformacion de Datos]
+    DT1["Input: N documentos orders<br>con items embebidos"]
+    DT2["$unwind: N * avg_items<br>documentos individuales"]
+    DT3["$group: R documentos<br>donde R = restaurantes<br>con pedidos ese dia"]
+    DT4["Output: R documentos<br>en daily_revenue"]
+    DT1 --> DT2 --> DT3 --> DT4
+  end

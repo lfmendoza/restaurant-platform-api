@@ -1,0 +1,25 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["email", "name", "role", "createdAt", "updatedAt"],
+    "properties": {
+      "email": { "bsonType": "string", "description": "Email único del usuario" },
+      "name": { "bsonType": "string", "minLength": 1 },
+      "phone": { "bsonType": "string" },
+      "role": { "enum": ["customer", "restaurant_admin"] },
+      "defaultAddress": {
+        "bsonType": "object",
+        "properties": {
+          "street": { "bsonType": "string" },
+          "city": { "bsonType": "string" },
+          "zone": { "bsonType": "string" },
+          "coordinates": { "bsonType": "object" }
+        }
+      },
+      "orderHistory": { "bsonType": "array", "items": { "bsonType": "objectId" } },
+      "favoriteRestaurants": { "bsonType": "array", "items": { "bsonType": "objectId" } },
+      "createdAt": { "bsonType": "date" },
+      "updatedAt": { "bsonType": "date" }
+    }
+  }
+}

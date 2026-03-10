@@ -1,0 +1,24 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["restaurantId", "date", "orderCount", "revenue"],
+    "properties": {
+      "restaurantId": { "bsonType": "objectId" },
+      "date": { "bsonType": "date" },
+      "orderCount": { "bsonType": "int", "minimum": 0 },
+      "deliveredCount": { "bsonType": "int", "minimum": 0 },
+      "cancelledCount": { "bsonType": "int", "minimum": 0 },
+      "revenue": { "bsonType": "number", "minimum": 0 },
+      "avgOrderValue": { "bsonType": "number" },
+      "cancelRate": { "bsonType": "number", "minimum": 0, "maximum": 1 },
+      "peakHour": {
+        "bsonType": "object",
+        "properties": {
+          "hour": { "bsonType": "int", "minimum": 0, "maximum": 23 },
+          "count": { "bsonType": "int" }
+        }
+      },
+      "topCategories": { "bsonType": "array" }
+    }
+  }
+}

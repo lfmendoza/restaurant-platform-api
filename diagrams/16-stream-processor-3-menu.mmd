@@ -1,0 +1,27 @@
+flowchart TD
+  subgraph trigger [Trigger: oplog de menu_items]
+    T1["menu_items.watch<br>filter: insert OR delete"]
+  end
+
+  T1 --> D1{"Tipo de<br>operacion?"}
+
+  D1 -->|"insert"| INS["Extraer restaurantId<br>del fullDocument"]
+  D1 -->|"delete"| DEL["Extraer restaurantId<br>del documentKey<br>o preImage"]
+
+  INS --> W1["updateOne restaurants<br>filtro: _id = restaurantId<br>$inc menuItemCount: +1"]
+  DEL --> W2["updateOne restaurants<br>filtro: _id = restaurantId<br>$inc menuItemCount: -1"]
+
+  subgraph context [Contexto de Uso]
+    C1["Flow 7: Bulk Upload<br>menu_items.bulkWrite 50K+<br>genera N eventos insert"]
+    C2["Cada insert individual<br>dispara el processor"]
+    C3["restaurants.menuItemCount<br>se incrementa N veces"]
+    C1 --> C2 --> C3
+  end
+
+  subgraph note [Nota Tecnica]
+    N1["En operaciones delete<br>fullDocument no esta disponible<br>por defecto"]
+    N2["Solucion: habilitar<br>changeStreamPreAndPostImages<br>en la coleccion"]
+    N3["O mantener un tracking<br>separado de restaurantId<br>por menuItemId"]
+    N1 --> N2
+    N1 --> N3
+  end

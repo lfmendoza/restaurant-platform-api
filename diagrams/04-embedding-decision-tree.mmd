@@ -1,0 +1,12 @@
+flowchart TD
+  A["Cardinalidad"] --> B{"1:1 o 1:few?"}
+  B -->|Si| C["Tamano acotado?"]
+  B -->|No 1:many| G["REFERENCING"]
+  C -->|Si| D["Acceso siempre conjunto?"]
+  C -->|No| G
+  D -->|Si| E["Inmutable tras crear?"]
+  D -->|No| G
+  E -->|Si| F["EMBEDDING"]
+  E -->|No| H["Actualizaciones poco frecuentes?"]
+  H -->|Si| F
+  H -->|No| G

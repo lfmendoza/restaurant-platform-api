@@ -1,0 +1,30 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["userId", "restaurantId", "items", "subtotal", "hasUnavailableItems", "createdAt", "updatedAt", "expiresAt"],
+    "properties": {
+      "userId": { "bsonType": "objectId" },
+      "restaurantId": { "bsonType": "objectId" },
+      "items": {
+        "bsonType": "array",
+        "items": {
+          "bsonType": "object",
+          "required": ["menuItemId", "name", "price", "quantity", "subtotal", "available"],
+          "properties": {
+            "menuItemId": { "bsonType": "objectId" },
+            "name": { "bsonType": "string" },
+            "price": { "bsonType": "number" },
+            "quantity": { "bsonType": "int", "minimum": 1 },
+            "subtotal": { "bsonType": "number" },
+            "available": { "bsonType": "bool" }
+          }
+        }
+      },
+      "subtotal": { "bsonType": "number" },
+      "hasUnavailableItems": { "bsonType": "bool" },
+      "createdAt": { "bsonType": "date" },
+      "updatedAt": { "bsonType": "date" },
+      "expiresAt": { "bsonType": "date" }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+sequenceDiagram
+  participant User
+  participant API
+  participant orders as orders
+  participant reviews as reviews
+  participant CS as ChangeStream
+  participant stats as restaurant_stats
+
+  User->>API: POST /reviews orderId rating 4 title comment tags
+  API->>orders: findOne orderId userId status delivered
+  Note over API: Validar orden existe + pertenece a user + delivered
+  API->>reviews: findOne orderId userId
+  Note over API: Validar no hay resena duplicada
+
+  API->>reviews: insertOne userId restaurantId orderId rating title comment tags
+  reviews->>CS: insert detectado
+
+  Note over CS, stats: Promedio Incremental O(1)
+  CS->>stats: updateOne _id restaurantId $inc totalReviews 1 ratingDistribution $set avgRating
+  Note over CS: newAvg = (oldAvg*oldCount+newRating) / (oldCount+1)
+
+  API-->>User: reviewId publicado

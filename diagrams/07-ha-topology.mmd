@@ -1,0 +1,15 @@
+flowchart LR
+  subgraph az1 [AZ-1]
+    P["Primary"]
+  end
+  subgraph az2 [AZ-2]
+    S1["Secondary-1"]
+  end
+  subgraph az3 [AZ-3]
+    S2["Secondary-2"]
+  end
+
+  P -->|"sync replication"| S1
+  P -->|"sync replication"| S2
+  S1 -.->|"auto-failover menor a 10s"| P
+  S2 -.->|"auto-failover menor a 10s"| P

@@ -1,0 +1,12 @@
+stateDiagram-v2
+  [*] --> pending
+  pending --> confirmed : restaurante acepta
+  pending --> cancelled : usuario/timeout cancela
+  confirmed --> preparing : cocina inicia
+  preparing --> ready_for_pickup : platillo listo
+  ready_for_pickup --> picked_up : repartidor recoge
+  picked_up --> delivered : entrega completada
+  confirmed --> cancelled : restaurante cancela
+  preparing --> cancelled : restaurante cancela
+  delivered --> [*]
+  cancelled --> [*]

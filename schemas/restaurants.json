@@ -1,0 +1,36 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "location", "address", "operatingHours", "cuisineTypes", "isActive", "isAcceptingOrders", "menuItemCount", "createdAt", "updatedAt"],
+    "properties": {
+      "name": { "bsonType": "string", "minLength": 1 },
+      "description": { "bsonType": "string" },
+      "location": {
+        "bsonType": "object",
+        "required": ["type", "coordinates"],
+        "properties": {
+          "type": { "enum": ["Point"] },
+          "coordinates": { "bsonType": "array", "items": { "bsonType": "double" }, "minItems": 2, "maxItems": 2 }
+        }
+      },
+      "address": {
+        "bsonType": "object",
+        "required": ["street", "city"],
+        "properties": {
+          "street": { "bsonType": "string" },
+          "city": { "bsonType": "string" },
+          "zone": { "bsonType": "string" }
+        }
+      },
+      "operatingHours": { "bsonType": "object" },
+      "cuisineTypes": { "bsonType": "array", "items": { "bsonType": "string" }, "minItems": 1 },
+      "tags": { "bsonType": "array", "items": { "bsonType": "string" } },
+      "isActive": { "bsonType": "bool" },
+      "isAcceptingOrders": { "bsonType": "bool" },
+      "logoFileId": { "bsonType": ["objectId", "null"] },
+      "menuItemCount": { "bsonType": "int", "minimum": 0 },
+      "createdAt": { "bsonType": "date" },
+      "updatedAt": { "bsonType": "date" }
+    }
+  }
+}

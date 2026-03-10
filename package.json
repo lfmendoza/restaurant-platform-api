@@ -1,0 +1,21 @@
+{
+  "name": "restaurantos-api",
+  "version": "1.0.0",
+  "description": "RestaurantOS — REST API for the Restaurant Orders & Reviews Platform (MongoDB Atlas)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "mongodb": "^6.5.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

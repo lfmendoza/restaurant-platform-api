@@ -1,0 +1,23 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["restaurantName", "avgRating", "totalReviews", "totalOrders", "totalRevenue", "lastUpdated"],
+    "properties": {
+      "_id": { "bsonType": "objectId", "description": "Same as restaurantId (Computed Pattern)" },
+      "restaurantName": { "bsonType": "string" },
+      "avgRating": { "bsonType": "number", "minimum": 0, "maximum": 5 },
+      "totalReviews": { "bsonType": "int", "minimum": 0 },
+      "totalOrders": { "bsonType": "int", "minimum": 0 },
+      "totalDelivered": { "bsonType": "int", "minimum": 0 },
+      "totalCancelled": { "bsonType": "int", "minimum": 0 },
+      "totalRevenue": { "bsonType": "number", "minimum": 0 },
+      "avgOrderValue": { "bsonType": "number" },
+      "avgDeliveryTimeMin": { "bsonType": "number" },
+      "topSellingItems": { "bsonType": "array" },
+      "ratingDistribution": { "bsonType": "object" },
+      "lastOrderAt": { "bsonType": ["date", "null"] },
+      "lastReviewAt": { "bsonType": ["date", "null"] },
+      "lastUpdated": { "bsonType": "date" }
+    }
+  }
+}

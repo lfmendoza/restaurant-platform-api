@@ -1,0 +1,16 @@
+flowchart TD
+  users --> orders
+  users --> reviews
+  users --> carts
+  restaurants --> orders
+  restaurants --> reviews
+  restaurants --> menu_items
+  restaurants --> delivery_zones
+  menu_items --> orders
+  menu_items --> carts
+  orders --> reviews
+
+  orders -.->|"Change Stream"| order_events
+  orders -.->|"Change Stream"| restaurant_stats
+  reviews -.->|"Change Stream"| restaurant_stats
+  orders -.->|"Batch $merge"| daily_revenue

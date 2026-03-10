@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant Client
+  participant CommandAPI
+  participant OLTP
+  participant CS as Change Streams
+  participant OLAP
+
+  Client->>CommandAPI: POST /orders (crear pedido)
+  CommandAPI->>OLTP: startTransaction()
+  CommandAPI->>OLTP: validate + insertOne(orders) + updateMany(menu_items) + deleteOne(carts)
+  CommandAPI->>OLTP: commitTransaction()
+  OLTP->>CS: oplog event emitido automaticamente
+  CS->>OLAP: insertOne(order_events) Time Series
+  CS->>OLAP: updateOne(restaurant_stats) Materialized View

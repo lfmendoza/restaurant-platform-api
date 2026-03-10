@@ -1,0 +1,24 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["userId", "restaurantId", "rating", "createdAt"],
+    "properties": {
+      "userId": { "bsonType": "objectId" },
+      "restaurantId": { "bsonType": "objectId" },
+      "orderId": { "bsonType": ["objectId", "null"] },
+      "rating": { "bsonType": "int", "minimum": 1, "maximum": 5 },
+      "title": { "bsonType": "string" },
+      "comment": { "bsonType": "string" },
+      "tags": { "bsonType": "array", "items": { "bsonType": "string" } },
+      "restaurantResponse": {
+        "bsonType": "object",
+        "properties": {
+          "message": { "bsonType": "string" },
+          "respondedAt": { "bsonType": "date" }
+        }
+      },
+      "helpfulVotes": { "bsonType": "array", "items": { "bsonType": "objectId" } },
+      "createdAt": { "bsonType": "date" }
+    }
+  }
+}

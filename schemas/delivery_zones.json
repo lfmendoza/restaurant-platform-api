@@ -1,0 +1,21 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["restaurantId", "zoneName", "area", "deliveryFee", "estimatedMinutes", "isActive"],
+    "properties": {
+      "restaurantId": { "bsonType": "objectId" },
+      "zoneName": { "bsonType": "string" },
+      "area": {
+        "bsonType": "object",
+        "required": ["type", "coordinates"],
+        "properties": {
+          "type": { "enum": ["Polygon"] },
+          "coordinates": { "bsonType": "array" }
+        }
+      },
+      "deliveryFee": { "bsonType": "number", "minimum": 0 },
+      "estimatedMinutes": { "bsonType": "int", "minimum": 1 },
+      "isActive": { "bsonType": "bool" }
+    }
+  }
+}

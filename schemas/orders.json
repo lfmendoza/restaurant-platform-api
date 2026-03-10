@@ -1,0 +1,50 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["orderNumber", "userId", "restaurantId", "items", "status", "statusHistory", "subtotal", "tax", "deliveryFee", "total", "paymentMethod", "createdAt", "updatedAt"],
+    "properties": {
+      "orderNumber": { "bsonType": "string" },
+      "userId": { "bsonType": "objectId" },
+      "restaurantId": { "bsonType": "objectId" },
+      "items": {
+        "bsonType": "array",
+        "minItems": 1,
+        "items": {
+          "bsonType": "object",
+          "required": ["menuItemId", "name", "quantity", "unitPrice", "subtotal"],
+          "properties": {
+            "menuItemId": { "bsonType": "objectId" },
+            "name": { "bsonType": "string" },
+            "quantity": { "bsonType": "int", "minimum": 1 },
+            "unitPrice": { "bsonType": "number", "minimum": 0 },
+            "subtotal": { "bsonType": "number", "minimum": 0 }
+          }
+        }
+      },
+      "deliveryAddress": { "bsonType": "object" },
+      "status": { "enum": ["pending", "confirmed", "preparing", "ready_for_pickup", "picked_up", "delivered", "cancelled"] },
+      "statusHistory": {
+        "bsonType": "array",
+        "items": {
+          "bsonType": "object",
+          "required": ["status", "timestamp"],
+          "properties": {
+            "status": { "bsonType": "string" },
+            "timestamp": { "bsonType": "date" },
+            "actor": { "bsonType": "string" },
+            "durationFromPrevSec": { "bsonType": "int" }
+          }
+        }
+      },
+      "subtotal": { "bsonType": "number" },
+      "tax": { "bsonType": "number" },
+      "deliveryFee": { "bsonType": "number" },
+      "total": { "bsonType": "number" },
+      "paymentMethod": { "bsonType": "string" },
+      "cancellationReason": { "bsonType": ["string", "null"] },
+      "estimatedDelivery": { "bsonType": ["date", "null"] },
+      "createdAt": { "bsonType": "date" },
+      "updatedAt": { "bsonType": "date" }
+    }
+  }
+}

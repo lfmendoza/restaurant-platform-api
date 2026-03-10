@@ -1,0 +1,38 @@
+flowchart TB
+  subgraph oltp [OLTP - Source of Truth]
+    orders["orders"]
+    reviews["reviews"]
+    menu_items["menu_items"]
+  end
+
+  subgraph stream [Stream Processing - Real-Time via Change Streams]
+    CS1["Processor #1<br>orders watcher"]
+    CS2["Processor #2<br>reviews watcher"]
+    CS3["Processor #3<br>menu_items watcher"]
+  end
+
+  subgraph batch [Batch Processing - Scheduled Jobs]
+    B1["Job Nocturno<br>02:00 UTC diario"]
+    B2["Job Semanal<br>Reconciliacion"]
+  end
+
+  subgraph olap [OLAP - Derived Collections]
+    order_events["order_events<br>Time Series"]
+    restaurant_stats["restaurant_stats<br>Materialized View"]
+    daily_revenue["daily_revenue<br>Batch Aggregated"]
+  end
+
+  orders -->|"oplog insert/update"| CS1
+  reviews -->|"oplog insert"| CS2
+  menu_items -->|"oplog insert/delete"| CS3
+
+  CS1 -->|"insertOne por cada transicion"| order_events
+  CS1 -->|"$inc totalOrders totalDelivered totalRevenue"| restaurant_stats
+  CS2 -->|"incremental avg O(1)<br>$inc totalReviews ratingDistribution"| restaurant_stats
+  CS3 -->|"$inc menuItemCount +1/-1"| restaurants_target["restaurants.menuItemCount"]
+
+  orders -->|"$match delivered<br>$group restaurantId+date<br>$merge replace"| B1
+  B1 -->|"upsert por restaurante por dia"| daily_revenue
+
+  orders -->|"$match delivered<br>$group + $lookup reviews<br>$lookup restaurants<br>$merge replace"| B2
+  B2 -->|"overwrite completo"| restaurant_stats
