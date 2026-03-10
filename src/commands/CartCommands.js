@@ -1,8 +1,8 @@
-const { ObjectId } = require("mongodb");
 const { getDb } = require("../db");
 const AppError = require("../errors/AppError");
+const { requireFields, toObjectId, requireIntInRange } = require("../validation");
 
-class CartService {
+class CartCommands {
   static async recalculateSubtotal(filter) {
     const db = getDb();
     const cart = await db.collection("carts").findOne(filter);
@@ -18,19 +18,24 @@ class CartService {
   }
 
   static async addItem(userId, menuItemId, quantity) {
+    requireFields({ userId, menuItemId }, ["userId", "menuItemId"]);
+    const userOid = toObjectId(userId, "userId");
+    const menuOid = toObjectId(menuItemId, "menuItemId");
+
     const db = getDb();
     const menuItem = await db.collection("menu_items").findOne(
-      { _id: new ObjectId(menuItemId), available: true },
+      { _id: menuOid, available: true },
       { projection: { name: 1, price: 1, restaurantId: 1 } }
     );
 
     if (!menuItem) throw AppError.notFound("Menu item not found or unavailable");
 
     const qty = parseInt(quantity) || 1;
+    if (qty < 1) throw AppError.badRequest("quantity must be >= 1");
     const subtotal = Math.round(menuItem.price * qty * 100) / 100;
 
     await db.collection("carts").updateOne(
-      { userId: new ObjectId(userId), restaurantId: menuItem.restaurantId },
+      { userId: userOid, restaurantId: menuItem.restaurantId },
       {
         $push: {
           items: {
@@ -54,27 +59,29 @@ class CartService {
     );
 
     return this.recalculateSubtotal({
-      userId: new ObjectId(userId),
+      userId: userOid,
       restaurantId: menuItem.restaurantId,
     });
   }
 
   static async updateItemQuantity(userId, menuItemId, quantity) {
-    const db = getDb();
-    const qty = parseInt(quantity);
-    if (qty < 1) throw AppError.badRequest("quantity must be >= 1");
+    requireFields({ userId, menuItemId }, ["userId", "menuItemId"]);
+    const userOid = toObjectId(userId, "userId");
+    const menuOid = toObjectId(menuItemId, "menuItemId");
 
-    const oid = new ObjectId(menuItemId);
-    const cart = await db.collection("carts").findOne({ userId: new ObjectId(userId) });
+    const qty = requireIntInRange(quantity, "quantity", 1, 9999);
+
+    const db = getDb();
+    const cart = await db.collection("carts").findOne({ userId: userOid });
     if (!cart) throw AppError.notFound("Cart");
 
-    const item = cart.items.find((i) => i.menuItemId.toString() === oid.toString());
+    const item = cart.items.find((i) => i.menuItemId.toString() === menuOid.toString());
     if (!item) throw AppError.notFound("Item not in cart");
 
     const newSubtotal = Math.round(item.price * qty * 100) / 100;
 
     await db.collection("carts").updateOne(
-      { userId: new ObjectId(userId), "items.menuItemId": oid },
+      { userId: userOid, "items.menuItemId": menuOid },
       {
         $set: {
           "items.$.quantity": qty,
@@ -84,24 +91,40 @@ class CartService {
       }
     );
 
-    return this.recalculateSubtotal({ userId: new ObjectId(userId) });
+    return this.recalculateSubtotal({ userId: userOid });
   }
 
   static async removeItem(userId, menuItemId) {
+    requireFields({ userId, menuItemId }, ["userId", "menuItemId"]);
+    const userOid = toObjectId(userId, "userId");
+    const menuOid = toObjectId(menuItemId, "menuItemId");
+
     const db = getDb();
     const result = await db.collection("carts").updateOne(
-      { userId: new ObjectId(userId) },
+      { userId: userOid },
       {
-        $pull: { items: { menuItemId: new ObjectId(menuItemId) } },
+        $pull: { items: { menuItemId: menuOid } },
         $set: { updatedAt: new Date() },
       }
     );
 
     if (result.matchedCount === 0) throw AppError.notFound("Cart");
 
-    await this.recalculateSubtotal({ userId: new ObjectId(userId) });
+    await this.recalculateSubtotal({ userId: userOid });
     return result.modifiedCount;
+  }
+
+  static async deleteCart({ userId, restaurantId }) {
+    if (!userId) throw AppError.badRequest("userId required");
+    const userOid = toObjectId(userId, "userId");
+
+    const db = getDb();
+    const filter = { userId: userOid };
+    if (restaurantId) filter.restaurantId = toObjectId(restaurantId, "restaurantId");
+
+    const result = await db.collection("carts").deleteOne(filter);
+    return { deleted: result.deletedCount };
   }
 }
 
-module.exports = CartService;
+module.exports = CartCommands;

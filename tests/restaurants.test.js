@@ -1,7 +1,8 @@
 jest.mock("../src/db");
 
+const { ObjectId } = require("mongodb");
 const request = require("supertest");
-const { getDb } = require("../src/db");
+const { getDb, getReadDb } = require("../src/db");
 const app = require("../src/app");
 const { setupMockDb, createCursor } = require("./helpers/mock-db");
 const { ID, RESTAURANTS, DELIVERY_ZONES } = require("./helpers/fixtures");
@@ -9,7 +10,7 @@ const { ID, RESTAURANTS, DELIVERY_ZONES } = require("./helpers/fixtures");
 let col;
 
 beforeEach(() => {
-  ({ col } = setupMockDb(getDb));
+  ({ col } = setupMockDb(getDb, null, null, getReadDb));
 });
 
 describe("POST /restaurants", () => {
@@ -104,7 +105,11 @@ describe("GET /restaurants/search", () => {
 
 describe("POST /restaurants/many", () => {
   it("inserts multiple restaurants", async () => {
-    col("restaurants").insertMany.mockResolvedValue({ insertedCount: 3 });
+    col("restaurants").insertMany.mockResolvedValue({
+      insertedCount: 3,
+      insertedIds: { 0: new ObjectId(), 1: new ObjectId(), 2: new ObjectId() },
+    });
+    col("delivery_zones").insertMany.mockResolvedValue({ insertedCount: 9 });
 
     const res = await request(app)
       .post("/restaurants/many")

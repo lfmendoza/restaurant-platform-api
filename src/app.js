@@ -11,6 +11,7 @@ const ordersRouter = require("./routes/orders");
 const reviewsRouter = require("./routes/reviews");
 const filesRouter = require("./routes/files");
 const analyticsRouter = require("./routes/analytics");
+const simulationRouter = require("./routes/simulation");
 const docsRouter = require("./docs");
 
 const app = express();
@@ -26,6 +27,7 @@ app.use("/orders", ordersRouter);
 app.use("/reviews", reviewsRouter);
 app.use("/files", filesRouter);
 app.use("/analytics", analyticsRouter);
+app.use("/simulation", simulationRouter);
 app.use("/docs", docsRouter);
 
 app.get("/", (req, res) => {

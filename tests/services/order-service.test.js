@@ -1,7 +1,7 @@
 jest.mock("../../src/db");
 
 const { getDb, getClient } = require("../../src/db");
-const OrderService = require("../../src/services/OrderService");
+const OrderCommands = require("../../src/commands/OrderCommands");
 const { setupMockDb, createCursor } = require("../helpers/mock-db");
 const { ID, CARTS, MENU_ITEMS, RESTAURANTS, DELIVERY_ZONES } = require("../helpers/fixtures");
 
@@ -22,7 +22,39 @@ function setupHappyPath() {
   col("users").updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
 }
 
-describe("OrderService.checkout", () => {
+describe("OrderCommands.checkout — validation", () => {
+  it("throws 400 when userId is missing", async () => {
+    await expect(OrderCommands.checkout(null, ID.cart1.toString(), { coordinates: {} }, "card"))
+      .rejects.toMatchObject({ statusCode: 400, message: /userId/ });
+  });
+
+  it("throws 400 when cartId is missing", async () => {
+    await expect(OrderCommands.checkout(ID.user1.toString(), null, { coordinates: {} }, "card"))
+      .rejects.toMatchObject({ statusCode: 400, message: /cartId/ });
+  });
+
+  it("throws 400 when deliveryAddress is missing", async () => {
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), null, "card"))
+      .rejects.toMatchObject({ statusCode: 400, message: /deliveryAddress/ });
+  });
+
+  it("throws 400 when paymentMethod is missing", async () => {
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), { coordinates: {} }, null))
+      .rejects.toMatchObject({ statusCode: 400, message: /paymentMethod/ });
+  });
+
+  it("throws 400 when deliveryAddress lacks coordinates", async () => {
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), { street: "X" }, "card"))
+      .rejects.toMatchObject({ statusCode: 400, message: /coordinates/ });
+  });
+
+  it("throws 400 on invalid userId format", async () => {
+    await expect(OrderCommands.checkout("bad", ID.cart1.toString(), { coordinates: {} }, "card"))
+      .rejects.toMatchObject({ statusCode: 400, message: /userId/ });
+  });
+});
+
+describe("OrderCommands.checkout", () => {
   const address = {
     street: "Calle Test",
     city: "Guatemala",
@@ -33,7 +65,7 @@ describe("OrderService.checkout", () => {
   it("returns a complete order document with all required fields", async () => {
     setupHappyPath();
 
-    const order = await OrderService.checkout(
+    const order = await OrderCommands.checkout(
       ID.user1.toString(), ID.cart1.toString(), address, "card"
     );
 
@@ -52,7 +84,7 @@ describe("OrderService.checkout", () => {
   it("calculates tax as 12% of subtotal", async () => {
     setupHappyPath();
 
-    const order = await OrderService.checkout(
+    const order = await OrderCommands.checkout(
       ID.user1.toString(), ID.cart1.toString(), address, "card"
     );
 
@@ -63,7 +95,7 @@ describe("OrderService.checkout", () => {
   it("snapshots item names + prices from cart into order", async () => {
     setupHappyPath();
 
-    const order = await OrderService.checkout(
+    const order = await OrderCommands.checkout(
       ID.user1.toString(), ID.cart1.toString(), address, "card"
     );
 
@@ -78,7 +110,7 @@ describe("OrderService.checkout", () => {
 
   it("increments salesCount for each item", async () => {
     setupHappyPath();
-    await OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
+    await OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
 
     const menuUpdateCalls = col("menu_items").updateOne.mock.calls;
     expect(menuUpdateCalls.length).toBe(CARTS.withItems.items.length);
@@ -89,13 +121,13 @@ describe("OrderService.checkout", () => {
 
   it("deletes the cart after order creation", async () => {
     setupHappyPath();
-    await OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
+    await OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
     expect(col("carts").deleteOne).toHaveBeenCalledTimes(1);
   });
 
   it("appends order to user orderHistory with $slice -50 (Subset Pattern)", async () => {
     setupHappyPath();
-    await OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
+    await OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card");
 
     const userUpdate = col("users").updateOne.mock.calls[0][1];
     expect(userUpdate.$push.orderHistory.$slice).toBe(-50);
@@ -103,13 +135,13 @@ describe("OrderService.checkout", () => {
 
   it("throws 400 when cart not found", async () => {
     col("carts").findOne.mockResolvedValue(null);
-    await expect(OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/cart not found/i) });
   });
 
   it("throws 400 when cart has unavailable items", async () => {
     col("carts").findOne.mockResolvedValue({ ...CARTS.withItems, hasUnavailableItems: true });
-    await expect(OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/unavailable/i) });
   });
 
@@ -117,7 +149,7 @@ describe("OrderService.checkout", () => {
     col("carts").findOne.mockResolvedValue(CARTS.withItems);
     col("menu_items").find.mockReturnValue(createCursor([MENU_ITEMS.pizza]));
 
-    await expect(OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/no longer available/i) });
   });
 
@@ -126,7 +158,7 @@ describe("OrderService.checkout", () => {
     col("menu_items").find.mockReturnValue(createCursor([MENU_ITEMS.pizza, MENU_ITEMS.coffee]));
     col("restaurants").findOne.mockResolvedValue(null);
 
-    await expect(OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/not accepting/i) });
   });
 
@@ -136,7 +168,7 @@ describe("OrderService.checkout", () => {
     col("restaurants").findOne.mockResolvedValue(RESTAURANTS.active);
     col("delivery_zones").findOne.mockResolvedValue(null);
 
-    await expect(OrderService.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
+    await expect(OrderCommands.checkout(ID.user1.toString(), ID.cart1.toString(), address, "card"))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/outside coverage/i) });
   });
 });

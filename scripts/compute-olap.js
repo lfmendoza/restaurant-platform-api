@@ -1,8 +1,7 @@
-// compute-olap.js — Compute restaurant_stats + daily_revenue from existing OLTP data
+// compute-olap.js — Compute restaurant_stats + daily_revenue from existing data
 // Ejecutar: mongosh "mongodb+srv://..." scripts/compute-olap.js
 const db = db.getSiblingDB("restaurant_orders");
 
-// Clean OLAP
 db.restaurant_stats.deleteMany({});
 db.daily_revenue.deleteMany({});
 
@@ -72,4 +71,4 @@ const revDocs = db.orders.aggregate([
 if (revDocs.length > 0) db.daily_revenue.insertMany(revDocs);
 print("  daily_revenue: " + db.daily_revenue.countDocuments());
 
-print("\nOLAP computation complete.");
+print("\nComputation complete.");

@@ -30,7 +30,7 @@ function createMockCollection() {
   };
 }
 
-function setupMockDb(getDb, getClient, getBucket) {
+function setupMockDb(getDb, getClient, getBucket, getReadDb) {
   const cols = {};
 
   function col(name) {
@@ -43,6 +43,10 @@ function setupMockDb(getDb, getClient, getBucket) {
   };
 
   getDb.mockReturnValue(mockDb);
+
+  if (getReadDb) {
+    getReadDb.mockReturnValue(mockDb);
+  }
 
   if (getClient) {
     getClient.mockReturnValue({

@@ -6,7 +6,7 @@
       "email": { "bsonType": "string", "description": "Email único del usuario" },
       "name": { "bsonType": "string", "minLength": 1 },
       "phone": { "bsonType": "string" },
-      "role": { "enum": ["customer", "restaurant_admin"] },
+      "role": { "enum": ["customer", "restaurant_admin", "admin", "restaurant_owner", "delivery_driver"] },
       "defaultAddress": {
         "bsonType": "object",
         "properties": {

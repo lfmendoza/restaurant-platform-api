@@ -1,9 +1,21 @@
-const { ObjectId } = require("mongodb");
 const { getDb, getClient } = require("../db");
 const AppError = require("../errors/AppError");
+const OrderStateMachine = require("../domain/OrderStateMachine");
+const { requireFields, toObjectId } = require("../validation");
 
-class OrderService {
+class OrderCommands {
   static async checkout(userId, cartId, deliveryAddress, paymentMethod) {
+    requireFields({ userId, cartId, deliveryAddress, paymentMethod }, [
+      "userId", "cartId", "deliveryAddress", "paymentMethod",
+    ]);
+
+    const userOid = toObjectId(userId, "userId");
+    const cartOid = toObjectId(cartId, "cartId");
+
+    if (!deliveryAddress.coordinates) {
+      throw AppError.badRequest("deliveryAddress must include coordinates");
+    }
+
     const client = getClient();
     const db = getDb();
     const session = client.startSession();
@@ -14,10 +26,7 @@ class OrderService {
       await session.withTransaction(async () => {
         const cart = await db
           .collection("carts")
-          .findOne(
-            { _id: new ObjectId(cartId), userId: new ObjectId(userId) },
-            { session }
-          );
+          .findOne({ _id: cartOid, userId: userOid }, { session });
 
         if (!cart) throw AppError.badRequest("Cart not found or does not belong to user");
         if (cart.hasUnavailableItems) throw AppError.badRequest("Cart has unavailable items");
@@ -56,7 +65,7 @@ class OrderService {
         const now = new Date();
         const orderDoc = {
           orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          userId: new ObjectId(userId),
+          userId: userOid,
           restaurantId: cart.restaurantId,
           items: cart.items.map((i) => ({
             menuItemId: i.menuItemId,
@@ -93,12 +102,8 @@ class OrderService {
         await db.collection("carts").deleteOne({ _id: cart._id }, { session });
 
         await db.collection("users").updateOne(
-          { _id: new ObjectId(userId) },
-          {
-            $push: {
-              orderHistory: { $each: [result.insertedId], $slice: -50 },
-            },
-          },
+          { _id: userOid },
+          { $push: { orderHistory: { $each: [result.insertedId], $slice: -50 } } },
           { session }
         );
       });
@@ -108,6 +113,38 @@ class OrderService {
       await session.endSession();
     }
   }
+
+  static async updateStatus(orderId, newStatus, actor = "system", reason = null) {
+    const _id = toObjectId(orderId, "orderId");
+    if (!newStatus) throw AppError.badRequest("newStatus is required");
+
+    const db = getDb();
+
+    const order = await db.collection("orders").findOne({ _id });
+    if (!order) throw AppError.notFound("Order");
+
+    const update = OrderStateMachine.buildTransition(order, newStatus, actor, reason);
+    await db.collection("orders").updateOne({ _id }, update);
+
+    return { status: newStatus, transition: `${order.status} → ${newStatus}` };
+  }
+
+  static async deleteCancelled({ before } = {}) {
+    const db = getDb();
+    const filter = { status: "cancelled" };
+    if (before) filter.createdAt = { $lt: new Date(before) };
+
+    const result = await db.collection("orders").deleteMany(filter);
+    return { deleted: result.deletedCount };
+  }
+
+  static async delete(orderId) {
+    const _id = toObjectId(orderId, "orderId");
+    const db = getDb();
+    const result = await db.collection("orders").deleteOne({ _id });
+    if (result.deletedCount === 0) throw AppError.notFound("Order");
+    return { deleted: result.deletedCount };
+  }
 }
 
-module.exports = OrderService;
+module.exports = OrderCommands;

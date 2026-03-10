@@ -26,21 +26,17 @@ tags:
   - name: Carts
     description: Carritos efímeros de compra (TTL 24 h).
   - name: Orders
-    description: Flujo completo de pedidos con máquina de estados (FSM).
+    description: Flujo completo de pedidos con máquina de estados.
   - name: Reviews
     description: Reseñas, ratings, tags y respuestas de restaurantes.
   - name: Files
     description: Upload / download / delete de imágenes vía GridFS.
   - name: Analytics
-    description: Agregaciones simples, complejas, OLAP y batch jobs.
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PATHS
-# ═══════════════════════════════════════════════════════════════════════════════
+    description: Agregaciones simples, complejas y batch jobs.
+  - name: Simulation
+    description: Motor de simulación para generar órdenes concurrentes y transiciones de estado para pruebas de carga del sistema.
 
 paths:
-
-  # ─── HEALTH ────────────────────────────────────────────────────────────────
 
   /health:
     get:
@@ -60,8 +56,6 @@ paths:
                   db:
                     type: string
                     example: restaurant_orders
-
-  # ─── USERS ─────────────────────────────────────────────────────────────────
 
   /users:
     post:
@@ -205,8 +199,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateResult'
 
-  # ─── RESTAURANTS ───────────────────────────────────────────────────────────
-
   /restaurants:
     post:
       summary: Crear restaurante
@@ -291,7 +283,7 @@ paths:
       summary: Buscar restaurantes por ubicación (geoespacial)
       description: >
         Usa $geoIntersects sobre delivery_zones para encontrar restaurantes que
-        cubren la ubicación del usuario, enriquecidos con restaurant_stats (CQRS).
+        cubren la ubicación del usuario, enriquecidos con restaurant_stats.
       tags: [Restaurants]
       parameters:
         - in: query
@@ -477,8 +469,6 @@ paths:
                 items:
                   type: string
                 example: [Entradas, Platos Principales, Postres, Bebidas]
-
-  # ─── MENU ITEMS ────────────────────────────────────────────────────────────
 
   /menu-items:
     post:
@@ -823,8 +813,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateResult'
 
-  # ─── CARTS ─────────────────────────────────────────────────────────────────
-
   /carts:
     get:
       summary: Obtener carrito del usuario
@@ -964,8 +952,6 @@ paths:
                   removed:
                     type: integer
 
-  # ─── ORDERS ────────────────────────────────────────────────────────────────
-
   /orders:
     post:
       summary: Crear pedido (transacción multi-documento)
@@ -1091,7 +1077,7 @@ paths:
 
   /orders/{id}/status:
     patch:
-      summary: Transición de estado (FSM) con statusHistory (Bucket Pattern)
+      summary: Transición de estado con statusHistory
       description: >
         Máquina de estados: pending → confirmed → preparing → ready_for_pickup →
         picked_up → delivered. Cualquier estado intermedio puede → cancelled.
@@ -1133,8 +1119,6 @@ paths:
           description: Transición no permitida.
         '404':
           description: Orden no encontrada.
-
-  # ─── REVIEWS ───────────────────────────────────────────────────────────────
 
   /reviews:
     post:
@@ -1358,8 +1342,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateResult'
 
-  # ─── FILES (GridFS) ────────────────────────────────────────────────────────
-
   /files:
     get:
       summary: Listar archivos subidos
@@ -1468,7 +1450,59 @@ paths:
                   fileId:
                     type: string
 
-  # ─── ANALYTICS ─────────────────────────────────────────────────────────────
+  /analytics/dashboard:
+    get:
+      summary: Obtener todos los datos de analytics en una sola petición
+      description: Ejecuta todas las consultas de analytics en paralelo con cache de 30s. Reemplaza las 12 peticiones individuales del dashboard.
+      tags: [Analytics]
+      responses:
+        "200":
+          description: Objeto con todos los datos de analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count_orders:
+                    type: object
+                  count_reviews:
+                    type: object
+                  distinct_status:
+                    type: object
+                  distinct_categories:
+                    type: object
+                  top_rest:
+                    type: array
+                    items:
+                      type: object
+                  best_items:
+                    type: array
+                    items:
+                      type: object
+                  rev_month:
+                    type: array
+                    items:
+                      type: object
+                  rev_category:
+                    type: array
+                    items:
+                      type: object
+                  tags:
+                    type: array
+                    items:
+                      type: object
+                  allergens:
+                    type: array
+                    items:
+                      type: object
+                  rest_stats:
+                    type: array
+                    items:
+                      type: object
+                  daily_rev:
+                    type: array
+                    items:
+                      type: object
 
   /analytics/count:
     get:
@@ -1705,7 +1739,7 @@ paths:
 
   /analytics/avg-transition-time/{restaurantId}:
     get:
-      summary: "Pipeline 6: Tiempo promedio entre transiciones de estado FSM"
+      summary: "Pipeline 6: Tiempo promedio entre transiciones de estado"
       tags: [Analytics]
       parameters:
         - in: path
@@ -1804,7 +1838,7 @@ paths:
 
   /analytics/daily-revenue:
     get:
-      summary: Ingresos diarios (colección OLAP pre-computada)
+      summary: Ingresos diarios pre-computados
       tags: [Analytics]
       parameters:
         - in: query
@@ -1845,7 +1879,7 @@ paths:
         - $ref: '#/components/parameters/limit'
       responses:
         '200':
-          description: Stats OLAP por restaurante.
+          description: Stats por restaurante.
           content:
             application/json:
               schema:
@@ -1904,9 +1938,127 @@ paths:
                   count:
                     type: integer
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# COMPONENTS
-# ═══════════════════════════════════════════════════════════════════════════════
+  /simulation/start:
+    post:
+      summary: Iniciar simulación
+      description: Inicia el motor de simulación con los parámetros especificados.
+      tags: [Simulation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                durationMinutes:
+                  type: integer
+                  enum: [1, 5, 10, 15]
+                  default: 1
+                  description: Duración de la simulación en minutos
+                ordersPerMinute:
+                  type: number
+                  default: 10
+                  description: Tasa base de órdenes por minuto (lambda del proceso Poisson)
+                peakMultiplier:
+                  type: number
+                  default: 3
+                  description: Multiplicador para horas pico (almuerzo/cena)
+                speedMultiplier:
+                  type: number
+                  default: 1
+                  description: Factor de velocidad para las transiciones (mayor = más rápido)
+      responses:
+        '200':
+          description: Simulación iniciada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+
+  /simulation/pause:
+    post:
+      summary: Pausar simulación
+      description: Pausa la generación de órdenes y las transiciones de estado. Los timers se preservan.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Simulación pausada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+
+  /simulation/resume:
+    post:
+      summary: Reanudar simulación
+      description: Reanuda la simulación desde donde fue pausada, restaurando los timers pendientes.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Simulación reanudada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+
+  /simulation/stop:
+    post:
+      summary: Detener simulación
+      description: Detiene completamente la simulación antes de que termine el tiempo.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Simulación detenida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+
+  /simulation/status:
+    get:
+      summary: Estado actual de la simulación
+      description: Retorna el estado del motor, tiempo transcurrido/restante y contadores de órdenes.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Estado de la simulación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+
+  /simulation/metrics:
+    get:
+      summary: Métricas completas de la simulación
+      description: >
+        Snapshot completo de métricas: throughput (ventana deslizante),
+        latencia (p50/p95/p99), concurrencia, heatmap por zona,
+        distribución de estados, patrones por método de pago/cocina/hora,
+        y tasa de cancelación.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Métricas de simulación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationMetrics'
+
+  /simulation/stream:
+    get:
+      summary: Stream SSE en tiempo real
+      description: >
+        Server-Sent Events stream con eventos en tiempo real:
+        order:created, order:transitioned, metrics:update, simulation:complete.
+      tags: [Simulation]
+      responses:
+        '200':
+          description: Stream SSE abierto
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event: order:created\ndata: {\"orderId\":\"...\"}\n\n"
 
 components:
 
@@ -2229,3 +2381,149 @@ components:
         deleted:
           type: integer
           example: 1
+
+    SimulationStatus:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [idle, running, paused, stopped]
+        config:
+          type: object
+          nullable: true
+          properties:
+            durationMinutes:
+              type: integer
+            ordersPerMinute:
+              type: number
+            peakMultiplier:
+              type: number
+            speedMultiplier:
+              type: number
+        elapsed:
+          type: object
+          properties:
+            ms:
+              type: integer
+            seconds:
+              type: integer
+            formatted:
+              type: string
+              example: "2m 30s"
+        remaining:
+          type: object
+          properties:
+            ms:
+              type: integer
+            seconds:
+              type: integer
+            formatted:
+              type: string
+        orders:
+          type: object
+          properties:
+            totalCreated:
+              type: integer
+            inFlight:
+              type: integer
+            completed:
+              type: integer
+            cancelled:
+              type: integer
+
+    SimulationMetrics:
+      type: object
+      properties:
+        elapsed:
+          type: object
+          properties:
+            ms:
+              type: integer
+            seconds:
+              type: integer
+            formatted:
+              type: string
+        orders:
+          type: object
+          properties:
+            totalCreated:
+              type: integer
+            totalCompleted:
+              type: integer
+            totalCancelled:
+              type: integer
+            cancellationRate:
+              type: number
+        throughput:
+          type: object
+          properties:
+            windowSeconds:
+              type: integer
+            completedInWindow:
+              type: integer
+        latency:
+          type: object
+          properties:
+            p50:
+              type: integer
+            p95:
+              type: integer
+            p99:
+              type: integer
+            avg:
+              type: integer
+            count:
+              type: integer
+        concurrency:
+          type: object
+          properties:
+            current:
+              type: integer
+            peak:
+              type: integer
+            byBucket:
+              type: array
+              items:
+                type: object
+                properties:
+                  bucket:
+                    type: string
+                    format: date-time
+                  peakConcurrency:
+                    type: integer
+        zoneHeatmap:
+          type: object
+          additionalProperties:
+            type: integer
+        statusDistribution:
+          type: object
+          properties:
+            pending:
+              type: integer
+            confirmed:
+              type: integer
+            preparing:
+              type: integer
+            ready_for_pickup:
+              type: integer
+            picked_up:
+              type: integer
+            delivered:
+              type: integer
+            cancelled:
+              type: integer
+        patterns:
+          type: object
+          properties:
+            byPaymentMethod:
+              type: object
+              additionalProperties:
+                type: integer
+            byCuisine:
+              type: object
+              additionalProperties:
+                type: integer
+            byHour:
+              type: object
+              additionalProperties:
+                type: integer

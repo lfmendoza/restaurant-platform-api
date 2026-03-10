@@ -42,7 +42,7 @@ npm start          # producción
 
 - **Healthcheck**: `GET http://localhost:3000/health` → debe responder `{"status":"ok","db":"restaurant_orders"}`.
 - **Datos de prueba**: por ejemplo `GET http://localhost:3000/restaurants?limit=5` y `GET http://localhost:3000/menu-items?limit=5` deberían devolver datos sembrados.
-- **Analítica**: `GET http://localhost:3000/analytics/top-restaurants` para validar colecciones OLAP y pipelines.
+- **Analítica**: `GET http://localhost:3000/analytics/top-restaurants` para validar pipelines de agregación.
 
 ### Cómo explorar todo lo que ofrece el API
 
@@ -197,7 +197,7 @@ npm start          # producción
 | POST | /orders | Create order (multi-doc transaction) |
 | GET | /orders | List ($lookup users+restaurants, filter, sort, skip, limit) |
 | GET | /orders/:id | Get order |
-| PATCH | /orders/:id/status | FSM transition ($push statusHistory) |
+| PATCH | /orders/:id/status | Status transition ($push statusHistory) |
 | DELETE | /orders/cancelled | deleteMany cancelled |
 | DELETE | /orders/:id | deleteOne |
 
@@ -229,12 +229,12 @@ npm start          # producción
 | GET | /analytics/revenue-by-month | $group temporal (complex P3) |
 | GET | /analytics/rating-distribution/:id | $group + $push (complex P4) |
 | GET | /analytics/order-velocity/:id | $dateTrunc 5min (complex P5, Time Series) |
-| GET | /analytics/avg-transition-time/:id | FSM avg duration |
+| GET | /analytics/avg-transition-time/:id | Avg transition duration |
 | GET | /analytics/tags | $unwind tags array |
 | GET | /analytics/allergens | $unwind allergens array |
 | GET | /analytics/revenue-by-category | embedded $unwind + $lookup |
-| GET | /analytics/daily-revenue | Query OLAP daily_revenue |
-| GET | /analytics/restaurant-stats | Query OLAP restaurant_stats |
+| GET | /analytics/daily-revenue | Query daily_revenue |
+| GET | /analytics/restaurant-stats | Query restaurant_stats |
 | POST | /analytics/run-batch | Trigger batch jobs ($merge) |
 
 ## Rubric Coverage

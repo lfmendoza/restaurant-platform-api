@@ -1,7 +1,7 @@
 jest.mock("../../src/db");
 
 const { getDb } = require("../../src/db");
-const CartService = require("../../src/services/CartService");
+const CartCommands = require("../../src/commands/CartCommands");
 const { setupMockDb } = require("../helpers/mock-db");
 const { ID, MENU_ITEMS, CARTS } = require("../helpers/fixtures");
 const { ObjectId } = require("mongodb");
@@ -12,7 +12,7 @@ beforeEach(() => {
   ({ col } = setupMockDb(getDb));
 });
 
-describe("CartService.recalculateSubtotal", () => {
+describe("CartCommands.recalculateSubtotal", () => {
   it("sums all item subtotals and updates the cart", async () => {
     const cart = {
       _id: ID.cart1,
@@ -27,7 +27,7 @@ describe("CartService.recalculateSubtotal", () => {
       .mockResolvedValueOnce({ ...cart, subtotal: 152.5 });
     col("carts").updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const result = await CartService.recalculateSubtotal({ _id: ID.cart1 });
+    const result = await CartCommands.recalculateSubtotal({ _id: ID.cart1 });
 
     expect(result.subtotal).toBe(152.5);
     const updateCall = col("carts").updateOne.mock.calls[0];
@@ -36,7 +36,7 @@ describe("CartService.recalculateSubtotal", () => {
 
   it("returns null when cart not found", async () => {
     col("carts").findOne.mockResolvedValue(null);
-    const result = await CartService.recalculateSubtotal({ _id: ID.cart1 });
+    const result = await CartCommands.recalculateSubtotal({ _id: ID.cart1 });
     expect(result).toBeNull();
   });
 
@@ -50,17 +50,17 @@ describe("CartService.recalculateSubtotal", () => {
       .mockResolvedValueOnce({ ...cart, subtotal: 31.0 });
     col("carts").updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    await CartService.recalculateSubtotal({ _id: ID.cart1 });
+    await CartCommands.recalculateSubtotal({ _id: ID.cart1 });
     const stored = col("carts").updateOne.mock.calls[0][1].$set.subtotal;
     expect(stored).toBe(31.0);
   });
 });
 
-describe("CartService.addItem", () => {
+describe("CartCommands.addItem", () => {
   it("validates menu item exists and is available", async () => {
     col("menu_items").findOne.mockResolvedValue(null);
 
-    await expect(CartService.addItem(ID.user1.toString(), ID.item1.toString(), 1))
+    await expect(CartCommands.addItem(ID.user1.toString(), ID.item1.toString(), 1))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -80,7 +80,7 @@ describe("CartService.addItem", () => {
         subtotal: 178,
       });
 
-    const cart = await CartService.addItem(ID.user1.toString(), ID.item1.toString(), 2);
+    const cart = await CartCommands.addItem(ID.user1.toString(), ID.item1.toString(), 2);
 
     expect(cart.subtotal).toBe(178);
 
@@ -93,16 +93,16 @@ describe("CartService.addItem", () => {
   });
 });
 
-describe("CartService.updateItemQuantity", () => {
+describe("CartCommands.updateItemQuantity", () => {
   it("rejects quantity < 1 with 400", async () => {
-    await expect(CartService.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 0))
-      .rejects.toMatchObject({ statusCode: 400, message: "quantity must be >= 1" });
+    await expect(CartCommands.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 0))
+      .rejects.toMatchObject({ statusCode: 400, message: /quantity/ });
   });
 
   it("returns 404 when cart not found", async () => {
     col("carts").findOne.mockResolvedValue(null);
 
-    await expect(CartService.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 2))
+    await expect(CartCommands.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 2))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -112,7 +112,7 @@ describe("CartService.updateItemQuantity", () => {
       items: [{ menuItemId: new ObjectId("000000000000000000000099") }],
     });
 
-    await expect(CartService.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 2))
+    await expect(CartCommands.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 2))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -132,7 +132,7 @@ describe("CartService.updateItemQuantity", () => {
       });
     col("carts").updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    await CartService.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 3);
+    await CartCommands.updateItemQuantity(ID.user1.toString(), ID.item1.toString(), 3);
 
     const updateCall = col("carts").updateOne.mock.calls[0];
     expect(updateCall[1].$set["items.$.quantity"]).toBe(3);
@@ -140,11 +140,11 @@ describe("CartService.updateItemQuantity", () => {
   });
 });
 
-describe("CartService.removeItem", () => {
+describe("CartCommands.removeItem", () => {
   it("throws 404 when cart not found", async () => {
     col("carts").updateOne.mockResolvedValue({ matchedCount: 0 });
 
-    await expect(CartService.removeItem(ID.user1.toString(), ID.item1.toString()))
+    await expect(CartCommands.removeItem(ID.user1.toString(), ID.item1.toString()))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -154,7 +154,7 @@ describe("CartService.removeItem", () => {
       .mockResolvedValueOnce({ _id: ID.cart1, items: [] })
       .mockResolvedValueOnce({ _id: ID.cart1, items: [], subtotal: 0 });
 
-    const removed = await CartService.removeItem(ID.user1.toString(), ID.item1.toString());
+    const removed = await CartCommands.removeItem(ID.user1.toString(), ID.item1.toString());
 
     expect(removed).toBe(1);
     const pullCall = col("carts").updateOne.mock.calls[0][1];

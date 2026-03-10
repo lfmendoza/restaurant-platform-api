@@ -1,23 +1,20 @@
 // seed-data.js
 // Idempotent seed: 200 users, 500 restaurants, 50,000+ menu items,
-// 1,000 orders (various statuses), 500+ reviews, 50 carts, plus OLAP collections.
+// 1,000 orders (various statuses), 500+ reviews, 50 carts.
 // Ejecutar: mongosh "mongodb+srv://..." scripts/seed-data.js
 
 const db = db.getSiblingDB("restaurant_orders");
 
-// ════════════════════════════════════════════════════════════════════════════════
 // HELPERS
-// ════════════════════════════════════════════════════════════════════════════════
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randBetween(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function daysAgo(n) { return new Date(Date.now() - n * 86400000); }
 function hoursAgo(n) { return new Date(Date.now() - n * 3600000); }
 function roundTwo(n) { return Math.round(n * 100) / 100; }
+function round5(n) { return Math.round(n * 100000) / 100000; }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 0. CLEANUP (idempotent — safe to re-run)
-// ════════════════════════════════════════════════════════════════════════════════
+// CLEANUP
 
 print("\n=== CLEANUP ===");
 ["users", "restaurants", "menu_items", "orders", "reviews",
@@ -40,9 +37,7 @@ try {
   print("  order_events: " + e.message);
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 1. REFERENCE DATA — Coherent dish catalog by category
-// ════════════════════════════════════════════════════════════════════════════════
+// REFERENCE DATA
 
 const DISHES_BY_CATEGORY = {
   "Entradas": [
@@ -134,6 +129,111 @@ const CUISINE_PREFIXES = {
 };
 const REVIEW_TAGS = ["recomendado", "buen-servicio", "rápido", "delicioso", "buena-porción", "ambiente-agradable", "pet-friendly", "económico", "fecha-especial", "familiar"];
 const PAYMENT_METHODS = ["card", "cash", "transfer"];
+
+function makeRect(center, dlng, dlat) {
+  var lng = center[0], lat = center[1];
+  return [[lng - dlng, lat - dlat], [lng + dlng, lat - dlat], [lng + dlng, lat + dlat], [lng - dlng, lat + dlat], [lng - dlng, lat - dlat]];
+}
+
+const GUATEMALA_ZONES = [
+  {
+    name: "Zona 1 - Centro Histórico",
+    center: [-90.5133, 14.6437],
+    address: { street: "6a Avenida y 9a Calle", city: "Guatemala", zone: "Zona 1" },
+    closePolygon: makeRect([-90.5133, 14.6437], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5133, 14.6437], 0.027, 0.022),
+    closeFee: 12, closeMinutes: 20, farFee: 25, farMinutes: 40
+  },
+  {
+    name: "Zona 4 - Cuatro Grados Norte",
+    center: [-90.5252, 14.6290],
+    address: { street: "Ruta 2, Cuatro Grados Norte", city: "Guatemala", zone: "Zona 4" },
+    closePolygon: makeRect([-90.5252, 14.6290], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5252, 14.6290], 0.027, 0.022),
+    closeFee: 10, closeMinutes: 18, farFee: 22, farMinutes: 35
+  },
+  {
+    name: "Zona 7 - Calzada San Juan",
+    center: [-90.5530, 14.6430],
+    address: { street: "Calzada San Juan 7-00", city: "Guatemala", zone: "Zona 7" },
+    closePolygon: makeRect([-90.5530, 14.6430], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5530, 14.6430], 0.027, 0.022),
+    closeFee: 14, closeMinutes: 22, farFee: 28, farMinutes: 42
+  },
+  {
+    name: "Zona 9 - Plazuela España",
+    center: [-90.5190, 14.6110],
+    address: { street: "7a Avenida y Ruta 4", city: "Guatemala", zone: "Zona 9" },
+    closePolygon: makeRect([-90.5190, 14.6110], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5190, 14.6110], 0.027, 0.022),
+    closeFee: 10, closeMinutes: 15, farFee: 20, farMinutes: 30
+  },
+  {
+    name: "Zona 10 - Zona Viva",
+    center: [-90.5065, 14.6070],
+    address: { street: "13 Calle y 2a Avenida", city: "Guatemala", zone: "Zona 10" },
+    closePolygon: makeRect([-90.5065, 14.6070], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5065, 14.6070], 0.027, 0.022),
+    closeFee: 10, closeMinutes: 15, farFee: 20, farMinutes: 30
+  },
+  {
+    name: "Zona 11 - Miraflores",
+    center: [-90.5470, 14.6060],
+    address: { street: "Calzada Roosevelt 22-43", city: "Guatemala", zone: "Zona 11" },
+    closePolygon: makeRect([-90.5470, 14.6060], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5470, 14.6060], 0.027, 0.022),
+    closeFee: 12, closeMinutes: 20, farFee: 25, farMinutes: 38
+  },
+  {
+    name: "Zona 13 - Aurora",
+    center: [-90.5280, 14.5870],
+    address: { street: "Avenida La Castellana", city: "Guatemala", zone: "Zona 13" },
+    closePolygon: makeRect([-90.5280, 14.5870], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5280, 14.5870], 0.027, 0.022),
+    closeFee: 13, closeMinutes: 22, farFee: 26, farMinutes: 40
+  },
+  {
+    name: "Zona 14 - Las Américas",
+    center: [-90.4970, 14.5930],
+    address: { street: "Boulevard Los Próceres", city: "Guatemala", zone: "Zona 14" },
+    closePolygon: makeRect([-90.4970, 14.5930], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.4970, 14.5930], 0.027, 0.022),
+    closeFee: 11, closeMinutes: 18, farFee: 23, farMinutes: 35
+  },
+  {
+    name: "Zona 15 - Vista Hermosa",
+    center: [-90.4850, 14.5990],
+    address: { street: "16 Calle Vista Hermosa", city: "Guatemala", zone: "Zona 15" },
+    closePolygon: makeRect([-90.4850, 14.5990], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.4850, 14.5990], 0.027, 0.022),
+    closeFee: 15, closeMinutes: 25, farFee: 30, farMinutes: 45
+  },
+  {
+    name: "Zona 16 - Cayalá",
+    center: [-90.4720, 14.5950],
+    address: { street: "Boulevard Rafael Landívar", city: "Guatemala", zone: "Zona 16" },
+    closePolygon: makeRect([-90.4720, 14.5950], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.4720, 14.5950], 0.027, 0.022),
+    closeFee: 16, closeMinutes: 25, farFee: 32, farMinutes: 45
+  },
+  {
+    name: "Mixco Centro",
+    center: [-90.5850, 14.6340],
+    address: { street: "Calzada San Cristóbal", city: "Mixco", zone: "Mixco" },
+    closePolygon: makeRect([-90.5850, 14.6340], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.5850, 14.6340], 0.027, 0.022),
+    closeFee: 18, closeMinutes: 28, farFee: 35, farMinutes: 50
+  },
+  {
+    name: "Carretera a El Salvador",
+    center: [-90.4600, 14.5850],
+    address: { street: "Km 16.5 Carretera a El Salvador", city: "Guatemala", zone: "Carretera a El Salvador" },
+    closePolygon: makeRect([-90.4600, 14.5850], 0.012, 0.009),
+    extendedPolygon: makeRect([-90.4600, 14.5850], 0.027, 0.022),
+    closeFee: 17, closeMinutes: 30, farFee: 35, farMinutes: 50
+  }
+];
+
 const NUM_RESTAURANTS = 500;
 const ITEMS_PER_RESTAURANT = 100;
 const NUM_USERS = 200;
@@ -141,9 +241,7 @@ const NUM_ORDERS = 1000;
 const NUM_REVIEWS = 500;
 const NUM_CARTS = 50;
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 2. SEED USERS
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED USERS
 
 print("\n=== SEEDING USERS ===");
 const userOps = [];
@@ -158,7 +256,7 @@ for (let i = 0; i < NUM_USERS; i++) {
       street: (i + 1) + "a Avenida " + i + "-" + (i * 2),
       city: "Guatemala",
       zone: "Zona " + ((i % 15) + 1),
-      coordinates: { type: "Point", coordinates: [roundTwo(-90.55 + Math.random() * 0.1), roundTwo(14.55 + Math.random() * 0.1)] }
+      coordinates: { type: "Point", coordinates: [round5(-90.55 + Math.random() * 0.1), round5(14.55 + Math.random() * 0.1)] }
     },
     orderHistory: [],
     favoriteRestaurants: [],
@@ -170,25 +268,34 @@ db.users.bulkWrite(userOps, { ordered: false });
 const userIds = db.users.find({}, { _id: 1 }).toArray().map(function(u) { return u._id; });
 print("  Users inserted: " + db.users.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 3. SEED RESTAURANTS
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED RESTAURANTS
 
 print("\n=== SEEDING RESTAURANTS ===");
-const restOps = [];
-for (let i = 0; i < NUM_RESTAURANTS; i++) {
-  const cuisine1 = CUISINES[i % CUISINES.length];
-  const cuisine2 = CUISINES[(i + 3) % CUISINES.length];
-  const prefixes = CUISINE_PREFIXES[cuisine1];
-  const name = prefixes[i % prefixes.length] + " #" + (Math.floor(i / CUISINES.length) + 1);
-  const lng = roundTwo(-90.6 + Math.random() * 0.3);
-  const lat = roundTwo(14.5 + Math.random() * 0.2);
+var GRID_COLS = 7;
+var GRID_SPACING = 0.003;
+var restOps = [];
+var zoneCounters = {};
+for (var i = 0; i < NUM_RESTAURANTS; i++) {
+  var cuisine1 = CUISINES[i % CUISINES.length];
+  var cuisine2 = CUISINES[(i + 3) % CUISINES.length];
+  var prefixes = CUISINE_PREFIXES[cuisine1];
+  var name = prefixes[i % prefixes.length] + " #" + (Math.floor(i / CUISINES.length) + 1);
+  var zoneIdx = i % GUATEMALA_ZONES.length;
+  var zone = GUATEMALA_ZONES[zoneIdx];
+
+  if (!zoneCounters[zoneIdx]) zoneCounters[zoneIdx] = 0;
+  var localIdx = zoneCounters[zoneIdx]++;
+  var col = localIdx % GRID_COLS;
+  var row = Math.floor(localIdx / GRID_COLS);
+  var totalRows = Math.ceil(Math.ceil(NUM_RESTAURANTS / GUATEMALA_ZONES.length) / GRID_COLS);
+  var lng = round5(zone.center[0] + (col - (GRID_COLS - 1) / 2) * GRID_SPACING);
+  var lat = round5(zone.center[1] + (row - (totalRows - 1) / 2) * GRID_SPACING * 0.75);
 
   restOps.push({ insertOne: { document: {
     name: name,
     description: "Restaurante de cocina " + cuisine1 + " y " + cuisine2,
     location: { type: "Point", coordinates: [lng, lat] },
-    address: { street: "Calle " + i, city: "Guatemala", zone: "Zona " + ((i % 15) + 1) },
+    address: { street: zone.address.street + " Local " + (i + 1), city: zone.address.city, zone: zone.address.zone },
     operatingHours: {
       monday:    { open: "10:00", close: "22:00" },
       tuesday:   { open: "10:00", close: "22:00" },
@@ -212,33 +319,37 @@ db.restaurants.bulkWrite(restOps, { ordered: false });
 const restaurantIds = db.restaurants.find({}, { _id: 1 }).toArray().map(function(r) { return r._id; });
 print("  Restaurants inserted: " + db.restaurants.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 4. SEED DELIVERY ZONES
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED DELIVERY ZONES
 
 print("\n=== SEEDING DELIVERY ZONES ===");
 const zoneOps = [];
 for (let ri = 0; ri < restaurantIds.length; ri++) {
   const rid = restaurantIds[ri];
-  const rest = db.restaurants.findOne({ _id: rid });
-  const lng = rest.location.coordinates[0];
-  const lat = rest.location.coordinates[1];
-  const offset = 0.02;
+  const zoneIdx = ri % GUATEMALA_ZONES.length;
+  const zone = GUATEMALA_ZONES[zoneIdx];
+
   zoneOps.push({ insertOne: { document: {
     restaurantId: rid,
-    zoneName: "Zona Centro (3 km)",
-    area: { type: "Polygon", coordinates: [[[lng - offset, lat - offset], [lng + offset, lat - offset], [lng + offset, lat + offset], [lng - offset, lat + offset], [lng - offset, lat - offset]]] },
-    deliveryFee: roundTwo(10 + Math.random() * 15),
-    estimatedMinutes: NumberInt(randBetween(15, 40)),
+    zoneName: zone.name + " (cercana)",
+    area: { type: "Polygon", coordinates: [zone.closePolygon] },
+    deliveryFee: zone.closeFee,
+    estimatedMinutes: NumberInt(zone.closeMinutes),
+    isActive: true
+  }}});
+
+  zoneOps.push({ insertOne: { document: {
+    restaurantId: rid,
+    zoneName: zone.name + " (extendida)",
+    area: { type: "Polygon", coordinates: [zone.extendedPolygon] },
+    deliveryFee: zone.farFee,
+    estimatedMinutes: NumberInt(zone.farMinutes),
     isActive: true
   }}});
 }
 db.delivery_zones.bulkWrite(zoneOps, { ordered: false });
 print("  Delivery zones inserted: " + db.delivery_zones.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 5. SEED MENU ITEMS (50,000+) — COHERENT CATEGORY ↔ DISH MAPPING
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED MENU ITEMS
 
 print("\n=== SEEDING MENU ITEMS ===");
 const BATCH_SIZE = 5000;
@@ -288,9 +399,7 @@ print("  Total menu_items: " + db.menu_items.countDocuments());
 // Fetch some menu items for order creation
 const menuItemsSample = db.menu_items.find({ available: true }, { _id: 1, restaurantId: 1, name: 1, price: 1 }).limit(5000).toArray();
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 6. SEED ORDERS (1,000 with realistic status distributions)
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED ORDERS
 
 print("\n=== SEEDING ORDERS ===");
 const STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_pickup", "picked_up", "delivered"];
@@ -420,9 +529,7 @@ Object.keys(ordersByUser).forEach(function(uid) {
   });
 });
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 7. SEED REVIEWS (linked to delivered orders)
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED REVIEWS
 
 print("\n=== SEEDING REVIEWS ===");
 const deliveredOrders = db.orders.find({ status: "delivered" }, { _id: 1, userId: 1, restaurantId: 1, createdAt: 1 }).limit(NUM_REVIEWS).toArray();
@@ -474,9 +581,7 @@ deliveredOrders.forEach(function(order) {
 if (reviewOps.length > 0) db.reviews.bulkWrite(reviewOps, { ordered: false });
 print("  Reviews inserted: " + db.reviews.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 8. SEED CARTS (active carts for some users)
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED CARTS
 
 print("\n=== SEEDING CARTS ===");
 const cartOps = [];
@@ -514,9 +619,7 @@ for (let ci = 0; ci < NUM_CARTS; ci++) {
 if (cartOps.length > 0) db.carts.bulkWrite(cartOps, { ordered: false });
 print("  Carts inserted: " + db.carts.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 9. SEED ORDER EVENTS (time series from order status histories)
-// ════════════════════════════════════════════════════════════════════════════════
+// SEED ORDER EVENTS
 
 print("\n=== SEEDING ORDER EVENTS ===");
 const eventBatches = [];
@@ -549,9 +652,7 @@ for (let eb = 0; eb < eventBatches.length; eb += 500) {
 }
 print("  Order events inserted: " + eventBatches.length);
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 10. COMPUTE RESTAURANT STATS (materialized view)
-// ════════════════════════════════════════════════════════════════════════════════
+// COMPUTE RESTAURANT STATS
 
 print("\n=== COMPUTING RESTAURANT STATS ===");
 const statsDocs = db.orders.aggregate([
@@ -605,9 +706,7 @@ db.orders.aggregate([
 });
 print("  Restaurant stats: " + db.restaurant_stats.countDocuments());
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 11. COMPUTE DAILY REVENUE (batch aggregate)
-// ════════════════════════════════════════════════════════════════════════════════
+// COMPUTE DAILY REVENUE
 
 print("\n=== COMPUTING DAILY REVENUE ===");
 const revDocs = db.orders.aggregate([
@@ -646,9 +745,7 @@ for (let fi = 10; fi < 60; fi++) {
 }
 print("  Updated 50 users with favorites");
 
-// ════════════════════════════════════════════════════════════════════════════════
 // SUMMARY
-// ════════════════════════════════════════════════════════════════════════════════
 
 print("\n=== SEED COMPLETE ===");
 db.getCollectionNames().forEach(function(coll) {

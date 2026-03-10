@@ -1,4 +1,4 @@
-const OrderStateMachine = require("../../src/services/OrderStateMachine");
+const OrderStateMachine = require("../../src/domain/OrderStateMachine");
 
 const VALID_TRANSITIONS = {
   pending:          ["confirmed", "cancelled"],

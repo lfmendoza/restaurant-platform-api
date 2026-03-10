@@ -1,7 +1,7 @@
 jest.mock("../../src/db");
 
 const { getDb } = require("../../src/db");
-const ReviewService = require("../../src/services/ReviewService");
+const ReviewCommands = require("../../src/commands/ReviewCommands");
 const { setupMockDb } = require("../helpers/mock-db");
 const { ID, ORDERS, REVIEWS } = require("../helpers/fixtures");
 
@@ -11,7 +11,33 @@ beforeEach(() => {
   ({ col } = setupMockDb(getDb));
 });
 
-describe("ReviewService.create", () => {
+describe("ReviewCommands.create — validation", () => {
+  it("throws 400 when userId is missing", async () => {
+    await expect(ReviewCommands.create({ orderId: ID.order1.toString(), restaurantId: ID.rest1.toString(), rating: 5 }))
+      .rejects.toMatchObject({ statusCode: 400, message: /userId/ });
+  });
+
+  it("throws 400 when rating is missing", async () => {
+    await expect(ReviewCommands.create({ userId: ID.user1.toString(), orderId: ID.order1.toString(), restaurantId: ID.rest1.toString() }))
+      .rejects.toMatchObject({ statusCode: 400, message: /rating/ });
+  });
+
+  it("throws 400 when rating is out of range", async () => {
+    await expect(ReviewCommands.create({
+      userId: ID.user1.toString(), orderId: ID.order1.toString(),
+      restaurantId: ID.rest1.toString(), rating: 6,
+    })).rejects.toMatchObject({ statusCode: 400, message: /rating.*between 1 and 5/i });
+  });
+
+  it("throws 400 on invalid ObjectId formats", async () => {
+    await expect(ReviewCommands.create({
+      userId: "bad", orderId: ID.order1.toString(),
+      restaurantId: ID.rest1.toString(), rating: 5,
+    })).rejects.toMatchObject({ statusCode: 400, message: /userId/ });
+  });
+});
+
+describe("ReviewCommands.create", () => {
   const validInput = {
     userId: ID.user1.toString(),
     orderId: ID.order1.toString(),
@@ -27,7 +53,7 @@ describe("ReviewService.create", () => {
     col("reviews").findOne.mockResolvedValue(null);
     col("reviews").insertOne.mockResolvedValue({ insertedId: ID.review1 });
 
-    const review = await ReviewService.create(validInput);
+    const review = await ReviewCommands.create(validInput);
 
     expect(review._id).toEqual(ID.review1);
     expect(review.rating).toBe(5);
@@ -41,7 +67,7 @@ describe("ReviewService.create", () => {
     col("reviews").findOne.mockResolvedValue(null);
     col("reviews").insertOne.mockResolvedValue({ insertedId: ID.review1 });
 
-    await ReviewService.create(validInput);
+    await ReviewCommands.create(validInput);
 
     const orderQuery = col("orders").findOne.mock.calls[0][0];
     expect(orderQuery._id).toEqual(ID.order1);
@@ -52,7 +78,7 @@ describe("ReviewService.create", () => {
   it("throws 400 when order not delivered or not found", async () => {
     col("orders").findOne.mockResolvedValue(null);
 
-    await expect(ReviewService.create(validInput))
+    await expect(ReviewCommands.create(validInput))
       .rejects.toMatchObject({ statusCode: 400 });
   });
 
@@ -60,7 +86,7 @@ describe("ReviewService.create", () => {
     col("orders").findOne.mockResolvedValue(ORDERS.delivered);
     col("reviews").findOne.mockResolvedValue(REVIEWS.positive);
 
-    await expect(ReviewService.create(validInput))
+    await expect(ReviewCommands.create(validInput))
       .rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/already submitted/i) });
   });
 
@@ -69,7 +95,7 @@ describe("ReviewService.create", () => {
     col("reviews").findOne.mockResolvedValue(null);
     col("reviews").insertOne.mockResolvedValue({ insertedId: ID.review1 });
 
-    const review = await ReviewService.create({
+    const review = await ReviewCommands.create({
       userId: ID.user1.toString(),
       orderId: ID.order1.toString(),
       restaurantId: ID.rest1.toString(),

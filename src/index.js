@@ -3,14 +3,11 @@ const { connect, getDb } = require("./db");
 
 const PORT = process.env.PORT || 3000;
 
-// ─── Change Stream Processors ────────────────────────────────────────────────
-
 let resumeTokenOrders = null;
 let resumeTokenReviews = null;
 let resumeTokenMenu = null;
 
 async function startChangeStreams(db) {
-  // Processor #1 — orders → order_events + restaurant_stats
   const ordersOptions = {
     fullDocument: "updateLookup",
     ...(resumeTokenOrders && { resumeAfter: resumeTokenOrders }),
@@ -94,7 +91,6 @@ async function startChangeStreams(db) {
     console.error("Orders Change Stream error:", err.message);
   });
 
-  // Processor #2 — reviews → restaurant_stats (incremental avg O(1))
   const reviewsOptions = {
     fullDocument: "updateLookup",
     ...(resumeTokenReviews && { resumeAfter: resumeTokenReviews }),
@@ -138,7 +134,6 @@ async function startChangeStreams(db) {
     console.error("Reviews Change Stream error:", err.message);
   });
 
-  // Processor #3 — menu_items → restaurants.menuItemCount
   const menuOptions = {
     ...(resumeTokenMenu && { resumeAfter: resumeTokenMenu }),
   };
@@ -171,8 +166,6 @@ async function startChangeStreams(db) {
 
   console.log("Change Streams started: orders, reviews, menu_items");
 }
-
-// ─── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main() {
   const { db } = await connect();

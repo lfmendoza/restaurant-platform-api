@@ -1,18 +1,46 @@
 jest.mock("../src/db");
 
 const request = require("supertest");
-const { getDb } = require("../src/db");
+const { getDb, getReadDb } = require("../src/db");
 const app = require("../src/app");
+const AnalyticsQueries = require("../src/queries/AnalyticsQueries");
 const { setupMockDb, createCursor } = require("./helpers/mock-db");
 const { ID } = require("./helpers/fixtures");
 
 let col;
 
 beforeEach(() => {
-  ({ col } = setupMockDb(getDb));
+  ({ col } = setupMockDb(getDb, null, null, getReadDb));
+  AnalyticsQueries.invalidateCache();
 });
 
-// ─── Simple Aggregations ────────────────────────────────────────────────────
+describe("GET /analytics/dashboard (batch endpoint)", () => {
+  it("returns all analytics data in a single response", async () => {
+    col("orders").countDocuments.mockResolvedValue(100);
+    col("reviews").countDocuments.mockResolvedValue(50);
+    col("orders").distinct.mockResolvedValue(["pending", "delivered"]);
+    col("menu_items").distinct.mockResolvedValue(["Platos Principales", "Bebidas"]);
+    col("reviews").aggregate.mockReturnValue(createCursor([]));
+    col("orders").aggregate.mockReturnValue(createCursor([]));
+    col("menu_items").aggregate.mockReturnValue(createCursor([]));
+    col("restaurant_stats").aggregate.mockReturnValue(createCursor([]));
+
+    const res = await request(app).get("/analytics/dashboard").expect(200);
+
+    expect(res.body).toHaveProperty("count_orders");
+    expect(res.body).toHaveProperty("count_reviews");
+    expect(res.body).toHaveProperty("distinct_status");
+    expect(res.body).toHaveProperty("distinct_categories");
+    expect(res.body).toHaveProperty("top_rest");
+    expect(res.body).toHaveProperty("best_items");
+    expect(res.body).toHaveProperty("rev_month");
+    expect(res.body).toHaveProperty("rev_category");
+    expect(res.body).toHaveProperty("tags");
+    expect(res.body).toHaveProperty("allergens");
+    expect(res.body).toHaveProperty("rest_stats");
+    expect(res.body).toHaveProperty("daily_rev");
+  });
+});
 
 describe("GET /analytics/count (countDocuments)", () => {
   it("counts documents in specified collection", async () => {
@@ -47,8 +75,6 @@ describe("GET /analytics/distinct", () => {
     await request(app).get("/analytics/distinct?field=category").expect(400);
   });
 });
-
-// ─── Complex Aggregation Pipelines ──────────────────────────────────────────
 
 describe("GET /analytics/top-restaurants (Pipeline 1: $group + $match + $lookup)", () => {
   it("returns ranked restaurants with avg rating", async () => {
@@ -139,7 +165,7 @@ describe("GET /analytics/order-velocity/:restaurantId (Pipeline 5: $dateTrunc Ti
 });
 
 describe("GET /analytics/avg-transition-time/:restaurantId (Pipeline 6)", () => {
-  it("returns average duration between FSM state transitions", async () => {
+  it("returns average duration between state transitions", async () => {
     col("order_events").aggregate.mockReturnValue(createCursor([
       { from: "pending", to: "confirmed", avgDurationSec: 180, count: 25 },
       { from: "confirmed", to: "preparing", avgDurationSec: 300, count: 22 },
@@ -154,8 +180,6 @@ describe("GET /analytics/avg-transition-time/:restaurantId (Pipeline 6)", () => 
     expect(res.body[0]).toHaveProperty("avgDurationSec");
   });
 });
-
-// ─── Array Aggregations ─────────────────────────────────────────────────────
 
 describe("GET /analytics/tags ($unwind + $group on arrays)", () => {
   it("returns tag frequency distribution", async () => {
@@ -200,24 +224,23 @@ describe("GET /analytics/revenue-by-category ($unwind items + $lookup)", () => {
   });
 });
 
-// ─── OLAP Pre-computed Collections ──────────────────────────────────────────
-
-describe("GET /analytics/daily-revenue (OLAP collection)", () => {
-  it("returns daily revenue records", async () => {
-    col("daily_revenue").find.mockReturnValue(createCursor([
-      { restaurantId: ID.rest1, date: new Date("2025-06-01"), revenue: 2500, orderCount: 30 },
+describe("GET /analytics/daily-revenue", () => {
+  it("returns daily revenue aggregated from orders", async () => {
+    col("orders").aggregate.mockReturnValue(createCursor([
+      { date: "2026-03-10", totalRevenue: 2500, orderCount: 30, avgOrderValue: 83.33 },
     ]));
 
     const res = await request(app).get("/analytics/daily-revenue?days=7").expect(200);
 
-    expect(res.body[0]).toHaveProperty("revenue");
+    expect(res.body[0]).toHaveProperty("date");
+    expect(res.body[0]).toHaveProperty("totalRevenue");
     expect(res.body[0]).toHaveProperty("orderCount");
   });
 });
 
-describe("GET /analytics/restaurant-stats (OLAP materialized view)", () => {
-  it("returns pre-computed stats sorted by avgRating", async () => {
-    col("restaurant_stats").find.mockReturnValue(createCursor([
+describe("GET /analytics/restaurant-stats", () => {
+  it("returns stats with restaurantName via $lookup", async () => {
+    col("restaurant_stats").aggregate.mockReturnValue(createCursor([
       { _id: ID.rest1, restaurantName: "Bella Italia #1", totalOrders: 50, avgRating: 4.5, totalRevenue: 5000 },
     ]));
 
@@ -228,8 +251,6 @@ describe("GET /analytics/restaurant-stats (OLAP materialized view)", () => {
     expect(res.body[0]).toHaveProperty("avgRating");
   });
 });
-
-// ─── Batch Jobs ─────────────────────────────────────────────────────────────
 
 describe("POST /analytics/run-batch ($merge materialized view)", () => {
   it("triggers daily revenue batch job", async () => {

@@ -1,7 +1,7 @@
 jest.mock("../src/db");
 
 const request = require("supertest");
-const { getDb } = require("../src/db");
+const { getDb, getReadDb } = require("../src/db");
 const app = require("../src/app");
 const { setupMockDb } = require("./helpers/mock-db");
 const { ID, MENU_ITEMS, CARTS } = require("./helpers/fixtures");
@@ -9,7 +9,7 @@ const { ID, MENU_ITEMS, CARTS } = require("./helpers/fixtures");
 let col;
 
 beforeEach(() => {
-  ({ col } = setupMockDb(getDb));
+  ({ col } = setupMockDb(getDb, null, null, getReadDb));
 });
 
 describe("GET /carts", () => {

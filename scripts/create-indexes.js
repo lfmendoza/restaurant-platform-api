@@ -4,10 +4,10 @@
 
 const db = db.getSiblingDB("restaurant_orders");
 
-// ========== USERS ==========
+// USERS
 db.users.createIndex({ email: 1 }, { unique: true });
 
-// ========== RESTAURANTS ==========
+// RESTAURANTS
 db.restaurants.createIndex({ location: "2dsphere" });
 db.restaurants.createIndex({ cuisineTypes: 1 });
 
@@ -17,7 +17,7 @@ db.menu_items.createIndex({ restaurantId: 1, category: 1, available: 1 });
 db.menu_items.createIndex({ allergens: 1 });
 db.menu_items.createIndex({ name: "text", description: "text" }, { default_language: "spanish" });
 
-// ========== ORDERS ==========
+// ORDERS
 db.orders.createIndex({ orderNumber: 1 }, { unique: true });
 db.orders.createIndex({ status: 1 });
 db.orders.createIndex({ restaurantId: 1, status: 1, createdAt: -1 });
@@ -29,19 +29,20 @@ db.reviews.createIndex({ restaurantId: 1, rating: -1, createdAt: -1 });
 db.reviews.createIndex({ tags: 1 });
 db.reviews.createIndex({ title: "text", comment: "text" }, { default_language: "spanish" });
 
-// ========== CARTS ==========
+// CARTS
 db.carts.createIndex({ userId: 1, restaurantId: 1 }, { unique: true });
 db.carts.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-// ========== DELIVERY_ZONES ==========
+// DELIVERY_ZONES
 db.delivery_zones.createIndex({ restaurantId: 1 });
 db.delivery_zones.createIndex({ area: "2dsphere" });
+db.delivery_zones.createIndex({ area: "2dsphere", isActive: 1 });
 
-// ========== RESTAURANT_STATS (OLAP) ==========
+// RESTAURANT_STATS
 db.restaurant_stats.createIndex({ avgRating: -1 });
 db.restaurant_stats.createIndex({ totalRevenue: -1 });
 
-// ========== DAILY_REVENUE (OLAP) ==========
+// DAILY_REVENUE
 db.daily_revenue.createIndex({ restaurantId: 1, date: -1 });
 
 print("All indexes created successfully.");

@@ -1,7 +1,7 @@
 jest.mock("../src/db");
 
 const request = require("supertest");
-const { getDb, getClient } = require("../src/db");
+const { getDb, getReadDb, getClient } = require("../src/db");
 const app = require("../src/app");
 const { setupMockDb, createCursor } = require("./helpers/mock-db");
 const { ID, CARTS, MENU_ITEMS, RESTAURANTS, DELIVERY_ZONES, ORDERS, VALID_TRANSITIONS } = require("./helpers/fixtures");
@@ -9,7 +9,7 @@ const { ID, CARTS, MENU_ITEMS, RESTAURANTS, DELIVERY_ZONES, ORDERS, VALID_TRANSI
 let col;
 
 beforeEach(() => {
-  ({ col } = setupMockDb(getDb, getClient));
+  ({ col } = setupMockDb(getDb, getClient, null, getReadDb));
 });
 
 describe("POST /orders (multi-document transaction)", () => {
@@ -58,12 +58,22 @@ describe("POST /orders (multi-document transaction)", () => {
     expect(userUpdate.$push.orderHistory.$slice).toBe(-50);
   });
 
-  it("fails when cart not found", async () => {
-    col("carts").findOne.mockResolvedValue(null);
-
+  it("fails when deliveryAddress lacks coordinates", async () => {
     const res = await request(app)
       .post("/orders")
       .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: {}, paymentMethod: "card" })
+      .expect(400);
+
+    expect(res.body.error).toMatch(/coordinates/i);
+  });
+
+  it("fails when cart not found", async () => {
+    col("carts").findOne.mockResolvedValue(null);
+
+    const addr = { coordinates: { type: "Point", coordinates: [-90.51, 14.59] } };
+    const res = await request(app)
+      .post("/orders")
+      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: addr, paymentMethod: "card" })
       .expect(400);
 
     expect(res.body.error).toMatch(/Cart not found/i);
@@ -72,9 +82,10 @@ describe("POST /orders (multi-document transaction)", () => {
   it("fails when cart has unavailable items", async () => {
     col("carts").findOne.mockResolvedValue({ ...CARTS.withItems, hasUnavailableItems: true });
 
+    const addr = { coordinates: { type: "Point", coordinates: [-90.51, 14.59] } };
     const res = await request(app)
       .post("/orders")
-      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: {}, paymentMethod: "card" })
+      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: addr, paymentMethod: "card" })
       .expect(400);
 
     expect(res.body.error).toMatch(/unavailable/i);
@@ -84,9 +95,10 @@ describe("POST /orders (multi-document transaction)", () => {
     col("carts").findOne.mockResolvedValue(CARTS.withItems);
     col("menu_items").find.mockReturnValue(createCursor([MENU_ITEMS.pizza]));
 
+    const addr = { coordinates: { type: "Point", coordinates: [-90.51, 14.59] } };
     const res = await request(app)
       .post("/orders")
-      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: {}, paymentMethod: "card" })
+      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: addr, paymentMethod: "card" })
       .expect(400);
 
     expect(res.body.error).toMatch(/no longer available/i);
@@ -97,9 +109,10 @@ describe("POST /orders (multi-document transaction)", () => {
     col("menu_items").find.mockReturnValue(createCursor([MENU_ITEMS.pizza, MENU_ITEMS.coffee]));
     col("restaurants").findOne.mockResolvedValue(null);
 
+    const addr = { coordinates: { type: "Point", coordinates: [-90.51, 14.59] } };
     const res = await request(app)
       .post("/orders")
-      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: {}, paymentMethod: "card" })
+      .send({ userId: ID.user1.toString(), cartId: ID.cart1.toString(), deliveryAddress: addr, paymentMethod: "card" })
       .expect(400);
 
     expect(res.body.error).toMatch(/not accepting/i);
@@ -162,7 +175,7 @@ describe("GET /orders/:id", () => {
   });
 });
 
-describe("PATCH /orders/:id/status (FSM transitions)", () => {
+describe("PATCH /orders/:id/status (state transitions)", () => {
   Object.entries(VALID_TRANSITIONS).forEach(([from, validTargets]) => {
     if (validTargets.length > 0) {
       it(`allows ${from} → ${validTargets[0]}`, async () => {
