@@ -1,0 +1,2231 @@
+openapi: 3.0.3
+info:
+  title: Restaurant Platform API
+  version: 1.0.0
+  description: >
+    REST API para el sistema de gestión de pedidos, reseñas y analítica de
+    restaurantes sobre MongoDB Atlas (CC3089 Bases de Datos 2).
+
+
+    **Recursos principales**: Users, Restaurants, Menu Items, Carts, Orders,
+    Reviews, Files (GridFS), Analytics.
+
+servers:
+  - url: http://localhost:3000
+    description: Servidor local de desarrollo
+
+tags:
+  - name: Health
+    description: Estado del servicio.
+  - name: Users
+    description: Gestión de usuarios (customers y restaurant_admin).
+  - name: Restaurants
+    description: Catálogo, descubrimiento geoespacial y gestión de restaurantes.
+  - name: MenuItems
+    description: Gestión de productos del menú de cada restaurante.
+  - name: Carts
+    description: Carritos efímeros de compra (TTL 24 h).
+  - name: Orders
+    description: Flujo completo de pedidos con máquina de estados (FSM).
+  - name: Reviews
+    description: Reseñas, ratings, tags y respuestas de restaurantes.
+  - name: Files
+    description: Upload / download / delete de imágenes vía GridFS.
+  - name: Analytics
+    description: Agregaciones simples, complejas, OLAP y batch jobs.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATHS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+paths:
+
+  # ─── HEALTH ────────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      summary: Healthcheck del servicio
+      tags: [Health]
+      responses:
+        '200':
+          description: Servicio activo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  db:
+                    type: string
+                    example: restaurant_orders
+
+  # ─── USERS ─────────────────────────────────────────────────────────────────
+
+  /users:
+    post:
+      summary: Crear usuario
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name]
+              properties:
+                email:
+                  type: string
+                  example: demo@example.com
+                name:
+                  type: string
+                  example: Usuario Demo
+                phone:
+                  type: string
+                  example: "+502 5555"
+                role:
+                  type: string
+                  enum: [customer, restaurant_admin]
+                  default: customer
+                defaultAddress:
+                  $ref: '#/components/schemas/Address'
+      responses:
+        '201':
+          description: Usuario creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Email ya registrado.
+
+    get:
+      summary: Listar usuarios
+      tags: [Users]
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [customer, restaurant_admin]
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista paginada de usuarios.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /users/{id}:
+    get:
+      summary: Obtener usuario por ID
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: Usuario no encontrado.
+
+    patch:
+      summary: Actualizar perfil de usuario
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                defaultAddress:
+                  $ref: '#/components/schemas/Address'
+      responses:
+        '200':
+          description: Resultado de la actualización.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+        '404':
+          description: Usuario no encontrado.
+
+    delete:
+      summary: Eliminar usuario
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Usuario eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '404':
+          description: Usuario no encontrado.
+
+  /users/{id}/favorites:
+    patch:
+      summary: Agregar restaurante a favoritos ($push + $slice Subset Pattern)
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [restaurantId]
+              properties:
+                restaurantId:
+                  type: string
+                  example: 65f1c5b8e8a1b2c3d4e5f678
+      responses:
+        '200':
+          description: Favorito agregado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+
+  # ─── RESTAURANTS ───────────────────────────────────────────────────────────
+
+  /restaurants:
+    post:
+      summary: Crear restaurante
+      tags: [Restaurants]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, location, address, operatingHours]
+              properties:
+                name:
+                  type: string
+                  example: La Pizzería Artesanal
+                description:
+                  type: string
+                location:
+                  $ref: '#/components/schemas/GeoPoint'
+                address:
+                  type: object
+                  properties:
+                    street:
+                      type: string
+                    city:
+                      type: string
+                    zone:
+                      type: string
+                operatingHours:
+                  type: object
+                  description: Horarios por día de la semana.
+                cuisineTypes:
+                  type: array
+                  items:
+                    type: string
+                  example: [italiana, mexicana]
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Restaurante creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+
+    get:
+      summary: Listar restaurantes
+      tags: [Restaurants]
+      parameters:
+        - in: query
+          name: cuisine
+          schema:
+            type: string
+          description: Filtrar por tipo de cocina.
+        - in: query
+          name: isActive
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - in: query
+          name: isAcceptingOrders
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista paginada de restaurantes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Restaurant'
+
+  /restaurants/search:
+    get:
+      summary: Buscar restaurantes por ubicación (geoespacial)
+      description: >
+        Usa $geoIntersects sobre delivery_zones para encontrar restaurantes que
+        cubren la ubicación del usuario, enriquecidos con restaurant_stats (CQRS).
+      tags: [Restaurants]
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema:
+            type: number
+          description: Latitud del usuario.
+        - in: query
+          name: lng
+          required: true
+          schema:
+            type: number
+          description: Longitud del usuario.
+        - in: query
+          name: cuisine
+          schema:
+            type: string
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Restaurantes con zona de entrega que cubre la ubicación.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restaurants:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Restaurant'
+                  total:
+                    type: integer
+        '400':
+          description: lat y lng son requeridos.
+
+  /restaurants/many:
+    post:
+      summary: Crear varios restaurantes (insertMany)
+      tags: [Restaurants]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [restaurants]
+              properties:
+                restaurants:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      location:
+                        $ref: '#/components/schemas/GeoPoint'
+                      address:
+                        type: object
+                      operatingHours:
+                        type: object
+                      cuisineTypes:
+                        type: array
+                        items:
+                          type: string
+      responses:
+        '201':
+          description: Restaurantes creados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  insertedCount:
+                    type: integer
+
+  /restaurants/{id}:
+    get:
+      summary: Obtener restaurante por ID (con stats)
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Restaurante con estadísticas pre-computadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '404':
+          description: Restaurante no encontrado.
+
+    patch:
+      summary: Actualizar restaurante
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                operatingHours:
+                  type: object
+                cuisineTypes:
+                  type: array
+                  items:
+                    type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Restaurante actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+        '404':
+          description: Restaurante no encontrado.
+
+    delete:
+      summary: Eliminar restaurante
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Restaurante eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '404':
+          description: Restaurante no encontrado.
+
+  /restaurants/{id}/status:
+    patch:
+      summary: Cambiar estado del restaurante (isAcceptingOrders / isActive)
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isAcceptingOrders:
+                  type: boolean
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Estado actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+
+  /restaurants/{id}/menu-categories:
+    get:
+      summary: Categorías de menú del restaurante (distinct)
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Array de categorías únicas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: [Entradas, Platos Principales, Postres, Bebidas]
+
+  # ─── MENU ITEMS ────────────────────────────────────────────────────────────
+
+  /menu-items:
+    post:
+      summary: Crear ítem de menú
+      tags: [MenuItems]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [restaurantId, name, price, category]
+              properties:
+                restaurantId:
+                  type: string
+                name:
+                  type: string
+                  example: Pizza Margherita
+                description:
+                  type: string
+                price:
+                  type: number
+                  example: 89.00
+                category:
+                  type: string
+                  example: Platos Principales
+                allergens:
+                  type: array
+                  items:
+                    type: string
+                  example: [gluten, lácteos]
+                tags:
+                  type: array
+                  items:
+                    type: string
+                preparationTimeMin:
+                  type: integer
+                  example: 20
+      responses:
+        '201':
+          description: Ítem creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+
+    get:
+      summary: Listar ítems de menú (filtros, text search, sort, paginación)
+      tags: [MenuItems]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: available
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - in: query
+          name: allergen
+          schema:
+            type: string
+          description: Filtrar por alérgeno (multikey index).
+        - in: query
+          name: price_lte
+          schema:
+            type: number
+          description: Precio máximo.
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Búsqueda full-text ($text).
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [salesCount, price]
+            default: salesCount
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista de ítems de menú.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuItem'
+
+    delete:
+      summary: Eliminar ítems por restaurante y categoría (deleteMany)
+      tags: [MenuItems]
+      parameters:
+        - in: query
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ítems eliminados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '400':
+          description: restaurantId requerido.
+
+  /menu-items/many:
+    post:
+      summary: Crear varios ítems a la vez (insertMany)
+      tags: [MenuItems]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [restaurantId, items]
+              properties:
+                restaurantId:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      price:
+                        type: number
+                      category:
+                        type: string
+                      allergens:
+                        type: array
+                        items:
+                          type: string
+                      tags:
+                        type: array
+                        items:
+                          type: string
+      responses:
+        '201':
+          description: Ítems insertados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  insertedCount:
+                    type: integer
+
+  /menu-items/bulk:
+    post:
+      summary: Operaciones mixtas en lote (bulkWrite ordered:false)
+      description: >
+        Soporta insertOne, updateOne, updateMany, deleteOne en un solo request.
+      tags: [MenuItems]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operations]
+              properties:
+                operations:
+                  type: array
+                  items:
+                    type: object
+                  description: Array de operaciones bulkWrite.
+            example:
+              operations:
+                - insertOne:
+                    document:
+                      restaurantId: "65f1..."
+                      name: "Nuevo Plato"
+                      price: 50
+                      category: "Entradas"
+                - updateOne:
+                    filter:
+                      _id: "65f2..."
+                    update:
+                      $set:
+                        price: 60
+      responses:
+        '200':
+          description: Resultado del bulkWrite.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  insertedCount:
+                    type: integer
+                  modifiedCount:
+                    type: integer
+                  deletedCount:
+                    type: integer
+                  upsertedCount:
+                    type: integer
+
+  /menu-items/{id}:
+    get:
+      summary: Obtener ítem de menú por ID
+      tags: [MenuItems]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Detalle del ítem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+        '404':
+          description: Ítem no encontrado.
+
+    patch:
+      summary: Actualizar ítem de menú
+      tags: [MenuItems]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                price:
+                  type: number
+                category:
+                  type: string
+                allergens:
+                  type: array
+                  items:
+                    type: string
+                preparationTimeMin:
+                  type: integer
+      responses:
+        '200':
+          description: Ítem actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+        '404':
+          description: Ítem no encontrado.
+
+    delete:
+      summary: Eliminar ítem de menú
+      tags: [MenuItems]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Ítem eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '404':
+          description: Ítem no encontrado.
+
+  /menu-items/{id}/availability:
+    patch:
+      summary: Cambiar disponibilidad + cascade a carritos (arrayFilters)
+      description: >
+        Actualiza available del ítem y propaga el cambio a todos los carritos
+        que lo contienen usando updateMany + arrayFilters.
+      tags: [MenuItems]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [available]
+              properties:
+                available:
+                  type: boolean
+      responses:
+        '200':
+          description: Disponibilidad actualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  itemUpdated:
+                    type: integer
+                  affectedCarts:
+                    type: integer
+
+  /menu-items/restaurant/{restaurantId}/category-price:
+    patch:
+      summary: Ajustar precios por categoría (updateMany + $mul)
+      tags: [MenuItems]
+      parameters:
+        - in: path
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: string
+                  description: Categoría a afectar (opcional, si omite aplica a todo).
+                multiplier:
+                  type: number
+                  example: 1.1
+                  description: Factor multiplicador (1.1 = +10%).
+      responses:
+        '200':
+          description: Precios actualizados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+
+  # ─── CARTS ─────────────────────────────────────────────────────────────────
+
+  /carts:
+    get:
+      summary: Obtener carrito del usuario
+      tags: [Carts]
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Carrito encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: userId requerido.
+        '404':
+          description: Carrito no encontrado.
+
+    delete:
+      summary: Eliminar carrito completo
+      tags: [Carts]
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Carrito eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+
+  /carts/items:
+    post:
+      summary: Agregar ítem al carrito (upsert + $push + $setOnInsert)
+      description: >
+        Si el carrito no existe, se crea automáticamente (upsert).
+        El ítem se valida contra menu_items y se agrega con embedded snapshot.
+      tags: [Carts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, menuItemId]
+              properties:
+                userId:
+                  type: string
+                menuItemId:
+                  type: string
+                quantity:
+                  type: integer
+                  default: 1
+      responses:
+        '200':
+          description: Carrito actualizado con el nuevo ítem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '404':
+          description: Ítem de menú no encontrado o no disponible.
+
+  /carts/items/{menuItemId}:
+    patch:
+      summary: Actualizar cantidad de ítem en carrito (positional $ operator)
+      tags: [Carts]
+      parameters:
+        - in: path
+          name: menuItemId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, quantity]
+              properties:
+                userId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Carrito actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: quantity debe ser >= 1.
+        '404':
+          description: Carrito o ítem no encontrado.
+
+    delete:
+      summary: Eliminar ítem del carrito ($pull)
+      tags: [Carts]
+      parameters:
+        - in: path
+          name: menuItemId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ítem eliminado del carrito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  removed:
+                    type: integer
+
+  # ─── ORDERS ────────────────────────────────────────────────────────────────
+
+  /orders:
+    post:
+      summary: Crear pedido (transacción multi-documento)
+      description: >
+        Valida carrito → ítems disponibles → restaurante abierto → zona de entrega
+        ($geoIntersects) → calcula totales → inserta orden → elimina carrito →
+        actualiza orderHistory del usuario. Todo dentro de una sesión transaccional.
+      tags: [Orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, cartId, deliveryAddress, paymentMethod]
+              properties:
+                userId:
+                  type: string
+                cartId:
+                  type: string
+                deliveryAddress:
+                  type: object
+                  properties:
+                    street:
+                      type: string
+                    city:
+                      type: string
+                    zone:
+                      type: string
+                    coordinates:
+                      $ref: '#/components/schemas/GeoPoint'
+                paymentMethod:
+                  type: string
+                  enum: [card, cash, transfer]
+      responses:
+        '201':
+          description: Orden creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Error de validación (carrito vacío, restaurante cerrado, fuera de zona, etc.).
+
+    get:
+      summary: Listar órdenes ($lookup users + restaurants)
+      tags: [Orders]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, preparing, ready_for_pickup, picked_up, delivered, cancelled]
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista de órdenes con datos enriquecidos de usuario y restaurante.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+
+  /orders/cancelled:
+    delete:
+      summary: Eliminar órdenes canceladas (deleteMany)
+      tags: [Orders]
+      parameters:
+        - in: query
+          name: before
+          schema:
+            type: string
+            format: date-time
+          description: Eliminar canceladas creadas antes de esta fecha.
+      responses:
+        '200':
+          description: Órdenes canceladas eliminadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+
+  /orders/{id}:
+    get:
+      summary: Obtener orden por ID
+      tags: [Orders]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Detalle de la orden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Orden no encontrada.
+
+    delete:
+      summary: Eliminar orden
+      tags: [Orders]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Orden eliminada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '404':
+          description: Orden no encontrada.
+
+  /orders/{id}/status:
+    patch:
+      summary: Transición de estado (FSM) con statusHistory (Bucket Pattern)
+      description: >
+        Máquina de estados: pending → confirmed → preparing → ready_for_pickup →
+        picked_up → delivered. Cualquier estado intermedio puede → cancelled.
+        Registra cada transición en statusHistory embebido con timestamp y duración.
+      tags: [Orders]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [confirmed, preparing, ready_for_pickup, picked_up, delivered, cancelled]
+                actor:
+                  type: string
+                  default: system
+                reason:
+                  type: string
+                  description: Razón de cancelación (solo si status = cancelled).
+      responses:
+        '200':
+          description: Transición exitosa.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  transition:
+                    type: string
+                    example: "pending → confirmed"
+        '400':
+          description: Transición no permitida.
+        '404':
+          description: Orden no encontrada.
+
+  # ─── REVIEWS ───────────────────────────────────────────────────────────────
+
+  /reviews:
+    post:
+      summary: Crear reseña (referenciada a orden delivered)
+      description: >
+        Valida que la orden existe, pertenece al usuario y tiene status delivered.
+        Impide reseñas duplicadas por orden.
+      tags: [Reviews]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, orderId, restaurantId, rating]
+              properties:
+                userId:
+                  type: string
+                orderId:
+                  type: string
+                restaurantId:
+                  type: string
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                title:
+                  type: string
+                  example: Excelente servicio
+                comment:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  example: [recomendado, buen-servicio]
+      responses:
+        '201':
+          description: Reseña creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          description: Orden no entregada o no pertenece al usuario.
+        '409':
+          description: Ya existe reseña para esta orden.
+
+    get:
+      summary: Listar reseñas (filtros, text search, paginación)
+      tags: [Reviews]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: rating
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - in: query
+          name: tag
+          schema:
+            type: string
+          description: Filtrar por tag (multikey index).
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Búsqueda full-text ($text) en title y comment.
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista de reseñas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+    delete:
+      summary: Eliminar reseñas por filtro (deleteMany)
+      tags: [Reviews]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: before
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Reseñas eliminadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '400':
+          description: Al menos un filtro requerido.
+
+  /reviews/{id}:
+    get:
+      summary: Obtener reseña por ID
+      tags: [Reviews]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Detalle de la reseña.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: Reseña no encontrada.
+
+    delete:
+      summary: Eliminar reseña
+      tags: [Reviews]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Reseña eliminada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        '404':
+          description: Reseña no encontrada.
+
+  /reviews/{id}/response:
+    patch:
+      summary: Respuesta del restaurante a una reseña (embebido 1:1)
+      tags: [Reviews]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  example: Gracias por tu reseña. Esperamos verte pronto.
+      responses:
+        '200':
+          description: Respuesta registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+        '404':
+          description: Reseña no encontrada.
+
+  /reviews/{id}/tag:
+    patch:
+      summary: Agregar tag a reseña ($addToSet)
+      tags: [Reviews]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag]
+              properties:
+                tag:
+                  type: string
+                  example: recomendado
+      responses:
+        '200':
+          description: Tag agregado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+
+  /reviews/{id}/helpful:
+    patch:
+      summary: Votar reseña como útil ($addToSet)
+      tags: [Reviews]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [voterId]
+              properties:
+                voterId:
+                  type: string
+                  description: ObjectId del usuario que vota.
+      responses:
+        '200':
+          description: Voto registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResult'
+
+  # ─── FILES (GridFS) ────────────────────────────────────────────────────────
+
+  /files:
+    get:
+      summary: Listar archivos subidos
+      tags: [Files]
+      parameters:
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Lista de archivos en GridFS.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    _id:
+                      type: string
+                    filename:
+                      type: string
+                    length:
+                      type: integer
+                    contentType:
+                      type: string
+                    uploadDate:
+                      type: string
+                      format: date-time
+
+  /files/upload:
+    post:
+      summary: Subir imagen a GridFS
+      description: >
+        Sube una imagen y opcionalmente la vincula a un menu_item o restaurant
+        actualizando imageFileId o logoFileId.
+      tags: [Files]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                menuItemId:
+                  type: string
+                  description: Vincular imagen a este menu_item.
+                restaurantId:
+                  type: string
+                  description: Vincular logo a este restaurant.
+      responses:
+        '201':
+          description: Archivo subido exitosamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
+                  filename:
+                    type: string
+                  size:
+                    type: integer
+                  url:
+                    type: string
+                    example: /files/65f1c5b8...
+        '400':
+          description: No se subió archivo o formato inválido.
+
+  /files/{id}:
+    get:
+      summary: Descargar imagen de GridFS
+      tags: [Files]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Stream de la imagen.
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Archivo no encontrado.
+
+    delete:
+      summary: Eliminar archivo de GridFS + desvincular
+      tags: [Files]
+      parameters:
+        - $ref: '#/components/parameters/objectId'
+      responses:
+        '200':
+          description: Archivo eliminado y desvinculado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  fileId:
+                    type: string
+
+  # ─── ANALYTICS ─────────────────────────────────────────────────────────────
+
+  /analytics/count:
+    get:
+      summary: Contar documentos (countDocuments — agregación simple)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: collection
+          required: true
+          schema:
+            type: string
+          description: Nombre de la colección (orders, reviews, menu_items, etc.).
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conteo de documentos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collection:
+                    type: string
+                  count:
+                    type: integer
+
+  /analytics/distinct:
+    get:
+      summary: Valores distintos de un campo (distinct — agregación simple)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: collection
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: field
+          required: true
+          schema:
+            type: string
+          description: Campo sobre el que obtener valores distintos.
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Valores distintos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collection:
+                    type: string
+                  field:
+                    type: string
+                  values:
+                    type: array
+                    items: {}
+
+  /analytics/top-restaurants:
+    get:
+      summary: "Pipeline 1: Restaurantes mejor calificados ($group + $match + $lookup)"
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: minReviews
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Ranking de restaurantes por rating promedio.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    restaurant:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        cuisineTypes:
+                          type: array
+                          items:
+                            type: string
+                    avgRating:
+                      type: number
+                    reviewCount:
+                      type: integer
+
+  /analytics/best-selling-items:
+    get:
+      summary: "Pipeline 2: Ítems más vendidos ($unwind + $group + $lookup)"
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Ranking de ítems por cantidad vendida.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    totalQty:
+                      type: integer
+                    totalRevenue:
+                      type: number
+                    category:
+                      type: string
+
+  /analytics/revenue-by-month:
+    get:
+      summary: "Pipeline 3: Ingresos por mes ($group temporal + $lookup)"
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ingresos agrupados por restaurante-mes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    restaurantName:
+                      type: string
+                    year:
+                      type: integer
+                    month:
+                      type: integer
+                    totalRevenue:
+                      type: number
+                    orderCount:
+                      type: integer
+                    avgOrderValue:
+                      type: number
+
+  /analytics/rating-distribution/{restaurantId}:
+    get:
+      summary: "Pipeline 4: Distribución de ratings ($group + $push)"
+      tags: [Analytics]
+      parameters:
+        - in: path
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Distribución de ratings 1-5.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  distribution:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rating:
+                          type: integer
+                        count:
+                          type: integer
+                  total:
+                    type: integer
+
+  /analytics/order-velocity/{restaurantId}:
+    get:
+      summary: "Pipeline 5: Velocidad de pedidos ($dateTrunc ventanas 5 min — Time Series)"
+      tags: [Analytics]
+      parameters:
+        - in: path
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: hoursBack
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Conteo de pedidos por ventana temporal de 5 minutos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    window:
+                      type: string
+                      format: date-time
+                    count:
+                      type: integer
+
+  /analytics/avg-transition-time/{restaurantId}:
+    get:
+      summary: "Pipeline 6: Tiempo promedio entre transiciones de estado FSM"
+      tags: [Analytics]
+      parameters:
+        - in: path
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Duración promedio por transición.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    from:
+                      type: string
+                    to:
+                      type: string
+                    avgDurationSec:
+                      type: number
+                    count:
+                      type: integer
+
+  /analytics/tags:
+    get:
+      summary: Tags más usados en reseñas ($unwind + $group)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+      responses:
+        '200':
+          description: Ranking de tags.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    tag:
+                      type: string
+                    count:
+                      type: integer
+
+  /analytics/allergens:
+    get:
+      summary: Alérgenos más comunes ($unwind + $group)
+      tags: [Analytics]
+      responses:
+        '200':
+          description: Ranking de alérgenos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    allergen:
+                      type: string
+                    count:
+                      type: integer
+
+  /analytics/revenue-by-category:
+    get:
+      summary: Ingresos por categoría ($unwind items + $lookup menu_items)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ingresos agrupados por categoría de menú.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    category:
+                      type: string
+                    totalRevenue:
+                      type: number
+                    totalQty:
+                      type: integer
+
+  /analytics/daily-revenue:
+    get:
+      summary: Ingresos diarios (colección OLAP pre-computada)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: restaurantId
+          schema:
+            type: string
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Registros diarios de ingresos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    restaurantId:
+                      type: string
+                    date:
+                      type: string
+                      format: date-time
+                    revenue:
+                      type: number
+                    orderCount:
+                      type: integer
+
+  /analytics/restaurant-stats:
+    get:
+      summary: Estadísticas pre-computadas de restaurantes (materialized view)
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/skip'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Stats OLAP por restaurante.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    _id:
+                      type: string
+                    restaurantName:
+                      type: string
+                    totalOrders:
+                      type: integer
+                    totalDelivered:
+                      type: integer
+                    totalCancelled:
+                      type: integer
+                    totalRevenue:
+                      type: number
+                    avgOrderValue:
+                      type: number
+                    totalReviews:
+                      type: integer
+                    avgRating:
+                      type: number
+
+  /analytics/run-batch:
+    post:
+      summary: Ejecutar batch job manualmente ($merge materialized views)
+      tags: [Analytics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                job:
+                  type: string
+                  enum: [daily, weekly]
+                  default: daily
+                targetDate:
+                  type: string
+                  format: date-time
+                  description: Fecha objetivo (solo para job=daily).
+      responses:
+        '200':
+          description: Job ejecutado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    type: string
+                  count:
+                    type: integer
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPONENTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+components:
+
+  parameters:
+    objectId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+      description: ObjectId de MongoDB (24 caracteres hex).
+    skip:
+      in: query
+      name: skip
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  schemas:
+
+    GeoPoint:
+      type: object
+      properties:
+        type:
+          type: string
+          example: Point
+        coordinates:
+          type: array
+          items:
+            type: number
+          example: [-90.5069, 14.5943]
+          description: "[longitude, latitude]"
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          example: 7a Avenida 12-30
+        city:
+          type: string
+          example: Guatemala
+        zone:
+          type: string
+          example: Zona 9
+        coordinates:
+          $ref: '#/components/schemas/GeoPoint'
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [customer, restaurant_admin]
+        defaultAddress:
+          $ref: '#/components/schemas/Address'
+        orderHistory:
+          type: array
+          items:
+            type: string
+        favoriteRestaurants:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Restaurant:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        location:
+          $ref: '#/components/schemas/GeoPoint'
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            zone:
+              type: string
+        operatingHours:
+          type: object
+        cuisineTypes:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        isAcceptingOrders:
+          type: boolean
+        logoFileId:
+          type: string
+          nullable: true
+        menuItemCount:
+          type: integer
+
+    MenuItem:
+      type: object
+      properties:
+        _id:
+          type: string
+        restaurantId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        category:
+          type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        available:
+          type: boolean
+        preparationTimeMin:
+          type: integer
+        imageFileId:
+          type: string
+          nullable: true
+        salesCount:
+          type: integer
+
+    Cart:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+        restaurantId:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              menuItemId:
+                type: string
+              name:
+                type: string
+              price:
+                type: number
+              quantity:
+                type: integer
+              subtotal:
+                type: number
+              available:
+                type: boolean
+        subtotal:
+          type: number
+        hasUnavailableItems:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      properties:
+        _id:
+          type: string
+        orderNumber:
+          type: string
+          example: ORD-1710000000000-123
+        userId:
+          type: string
+        restaurantId:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              menuItemId:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unitPrice:
+                type: number
+              subtotal:
+                type: number
+        deliveryAddress:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            zone:
+              type: string
+        status:
+          type: string
+          enum: [pending, confirmed, preparing, ready_for_pickup, picked_up, delivered, cancelled]
+        statusHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              actor:
+                type: string
+              durationFromPrevSec:
+                type: integer
+        subtotal:
+          type: number
+        tax:
+          type: number
+        deliveryFee:
+          type: number
+        total:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [card, cash, transfer]
+        cancellationReason:
+          type: string
+          nullable: true
+        estimatedDelivery:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+        restaurantId:
+          type: string
+        orderId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        comment:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        restaurantResponse:
+          type: object
+          nullable: true
+          properties:
+            message:
+              type: string
+            respondedAt:
+              type: string
+              format: date-time
+        helpfulVotes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    UpdateResult:
+      type: object
+      properties:
+        updated:
+          type: integer
+          example: 1
+
+    DeleteResult:
+      type: object
+      properties:
+        deleted:
+          type: integer
+          example: 1

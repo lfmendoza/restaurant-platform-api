@@ -2,25 +2,151 @@
 
 Node.js + Express + MongoDB Atlas — CC3089 Bases de Datos 2
 
-## Setup
+## Repositorios
+
+- **Backend (API)**: [restaurant-platform-api](https://github.com/lfmendoza/restaurant-platform-api)
+- **Frontend (cliente web)**: [restaurant-platform-web](https://github.com/lfmendoza/restaurant-platform-web)
+
+## Setup (primera vez)
 
 ```bash
-# 1. Install dependencies
+# 0. Prerrequisitos
+# - Node.js 20+ y npm
+# - Cuenta de MongoDB Atlas con un cluster creado
+
+# 1. Clonar repos
+git clone https://github.com/lfmendoza/restaurant-platform-api.git
+git clone https://github.com/lfmendoza/restaurant-platform-web.git
+cd restaurant-platform-api
+
+# 2. Instalar dependencias
 npm install
 
-# 2. Configure environment
+# 3. Configurar Atlas y variables de entorno
 cp .env.example .env
-# Edit .env and add your MONGO_URI from Atlas
+# Edita .env y reemplaza MONGO_URI con tu connection string de Atlas
+# (incluyendo usuario, password y el nombre de base de datos restaurant_orders)
 
-# 3. Initialize the database (run once against Atlas)
+# 4. Inicializar la base de datos (solo una vez contra Atlas)
 mongosh "$MONGO_URI" scripts/init-database.js
 mongosh "$MONGO_URI" scripts/create-indexes.js
-mongosh "$MONGO_URI" scripts/seed-data.js   # Seeds 500 restaurants + 50,000+ menu_items
+mongosh "$MONGO_URI" scripts/seed-data.js   # 500 restaurantes + 50,000+ menu_items
 
-# 4. Start the server
-npm start          # production
-npm run dev        # development (nodemon)
+# 5. Levantar el servidor API
+npm run dev        # desarrollo (nodemon en http://localhost:3000)
+# o
+npm start          # producción
 ```
+
+### Cómo validar que todo quedó bien
+
+- **Healthcheck**: `GET http://localhost:3000/health` → debe responder `{"status":"ok","db":"restaurant_orders"}`.
+- **Datos de prueba**: por ejemplo `GET http://localhost:3000/restaurants?limit=5` y `GET http://localhost:3000/menu-items?limit=5` deberían devolver datos sembrados.
+- **Analítica**: `GET http://localhost:3000/analytics/top-restaurants` para validar colecciones OLAP y pipelines.
+
+### Cómo explorar todo lo que ofrece el API
+
+- **Tablas de endpoints**: usa la sección **API Endpoints** de este README como índice rápido (similar a la doc pública de APIs como Airbnb/Zapier).
+- **Herramientas cliente**: importa estos endpoints en Postman/Insomnia (colección recomendada):
+  - Agrupa por recurso: `Users`, `Restaurants`, `Menu Items`, `Carts`, `Orders`, `Reviews`, `Files`, `Analytics`.
+  - Usa una variable de entorno `{{baseUrl}} = http://localhost:3000`.
+- **Cliente web**: en el repo `restaurant-platform-web` configura la misma `MONGO_URI`/backend y levanta el frontend para navegar el flujo completo de usuario (descubrir restaurantes, armar carrito, ordenar, reseñar).
+- **Documentación interactiva (Swagger UI)**: con el servidor levantado, visita `http://localhost:3000/docs` para ver y probar la especificación OpenAPI de la API directamente en el navegador.
+
+### Próximos pasos (tests y onboarding)
+
+- **Tests**: una vez verificado el flujo end-to-end, se pueden agregar pruebas de integración con supertest sobre rutas clave (`/orders`, `/analytics/*`, etc.) para automatizar regresiones.
+- **Onboarding adicional**: los documentos en `docs/` (`00-RESUMEN-EJECUTIVO.md`, `02-ARQUITECTURA-SISTEMA.md`, `07-OPERACIONES-CRUD.md`, `08-AGREGACIONES-PIPELINES.md`, etc.) profundizan en modelo de datos, flujos críticos y decisiones de diseño.
+
+### Checklist rápido antes de cada despliegue
+
+- Confirmar que `.env` apunta al cluster y base correctos (`DB_NAME=restaurant_orders` para dev).
+- Ejecutar (si es un cluster nuevo): `init-database.js`, `create-indexes.js`, `seed-data.js`.
+- Levantar el servidor y verificar `GET /health`.
+- Probar al menos: `GET /restaurants`, `GET /menu-items`, `GET /analytics/top-restaurants`.
+- Ejecutar `npm test` y asegurarse de que todas las pruebas pasan.
+
+## Guías de uso (recetas rápidas)
+
+### Crear un flujo completo de pedido
+
+1. **Crear un usuario**
+   - `POST /users`
+   - Body de ejemplo:
+   ```json
+   {
+     "email": "demo@example.com",
+     "name": "Usuario Demo",
+     "role": "customer"
+   }
+   ```
+
+2. **Descubrir restaurantes cercanos**
+   - `GET /restaurants/search?lat=14.6&lng=-90.5&cuisine=italiana`
+
+3. **Listar menú de un restaurante**
+   - `GET /menu-items?restaurantId=<restaurantId>&limit=20`
+
+4. **Armar carrito**
+   - `POST /carts/items`
+   - Body de ejemplo:
+   ```json
+   {
+     "userId": "<userId>",
+     "restaurantId": "<restaurantId>",
+     "menuItemId": "<menuItemId>",
+     "quantity": 2
+   }
+   ```
+
+5. **Confirmar orden**
+   - `POST /orders`
+   - Body de ejemplo (simplificado):
+   ```json
+   {
+     "userId": "<userId>",
+     "restaurantId": "<restaurantId>",
+     "deliveryAddress": {
+       "street": "6a Avenida 12-34",
+       "city": "Guatemala",
+       "zone": "Zona 10"
+     },
+     "paymentMethod": "card"
+   }
+   ```
+
+6. **Avanzar estado de la orden**
+   - `PATCH /orders/:id/status` con body:
+   ```json
+   {
+     "status": "confirmed"
+   }
+   ```
+
+7. **Dejar una reseña**
+   - `POST /reviews`
+   - Body de ejemplo:
+   ```json
+   {
+     "orderId": "<orderId>",
+     "rating": 5,
+     "title": "Excelente servicio",
+     "comment": "La comida llegó a tiempo y caliente",
+     "tags": ["recomendado"]
+   }
+   ```
+
+8. **Consultar analítica básica**
+   - `GET /analytics/top-restaurants`
+   - `GET /analytics/best-selling-items`
+
+### Códigos de estado y errores comunes
+
+- **200 / 201**: Operación exitosa.
+- **400**: Error de validación (body o query params inválidos, transiciones de estado ilegales, etc.).
+- **404**: Recurso no encontrado (por ejemplo `orderId` inexistente o no asociado al usuario).
+- **409**: Conflicto de negocio (por ejemplo carrito inconsistente, restaurante cerrado, fuera de zona de entrega).
+- **500**: Error interno inesperado (revisar logs del servidor).
 
 ## API Endpoints
 

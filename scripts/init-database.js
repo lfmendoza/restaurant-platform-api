@@ -1,12 +1,17 @@
 // init-database.js
-// Crear colecciones con validación JSON Schema + Time Series
-// Ejecutar: mongosh <connection_string> scripts/init-database.js
+// Idempotent: drops existing collections then creates with JSON Schema validation + Time Series
+// Ejecutar: mongosh "mongodb+srv://..." scripts/init-database.js
 
 const dbName = "restaurant_orders";
 const db = db.getSiblingDB(dbName);
 
-// Drop existing (development only)
-// db.dropDatabase();
+print("Dropping existing collections (idempotent)...");
+db.getCollectionNames().forEach(function(c) {
+  if (!c.startsWith("system.")) {
+    db.getCollection(c).drop();
+    print("  Dropped " + c);
+  }
+});
 
 // ========== OLTP COLLECTIONS ==========
 
